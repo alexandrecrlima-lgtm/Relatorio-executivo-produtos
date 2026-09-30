@@ -3,7 +3,6 @@ import json
 import requests
 from datetime import datetime
 
-# Mapeamento do Jira para as 11 Chaves de Produtos
 MAPEAMENTO_PRODUTOS = {
     "mensalista": {
         "name": "Mensalista Digital & Estapar",
@@ -100,7 +99,7 @@ def processar_chamados_jira(issues):
         motivos_ordenados = sorted(prod["motives_map"].items(), key=lambda x: x[1], reverse=True)[:5]
         
         prod["motives"] = []
-        for nome_motivo, qtd in motivos_ordenados:
+        for nome_motivo, qtd in motives_ordenados:
             pct = f"{((qtd / total_prod) * 100):.1f}%"
             prod["motives"].append({"name": nome_motivo, "qty": qtd, "pct": pct})
         
@@ -251,11 +250,13 @@ def executar_busca(url, headers, auth, jql):
         try:
             resp = requests.post(url, headers=headers, auth=auth, json=payload)
             if resp.status_code != 200:
-                print(f"Erro {resp.status_code} na query: {resp.text[:100]}")
+                print(f"Status HTTP {resp.status_code} na query: {resp.text[:150]}")
                 break
 
             data = resp.json()
             issues = data.get("issues", [])
+            print(f"Response ok. Chamados no lote atual: {len(issues)}")
+            
             if not issues:
                 break
 
@@ -264,7 +265,7 @@ def executar_busca(url, headers, auth, jql):
             if not next_page_token:
                 break
         except Exception as e:
-            print(f"Exceção na busca: {e}")
+            print(f"Exceção na requisição: {e}")
             break
 
     return issues_totais
@@ -285,16 +286,16 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
     
-    # Tentativas de JQL progressivas (da mais específica para a mais ampla)
+    # 🎯 TESTE PROGRESSIVO DE QUERIES (Mais restrita -> Mais ampla)
     queries = [
-        # 1. JQL Nativa completa com datas formatadas sem hora
-        'project in (TICKET, ECOIT) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01" ORDER BY created DESC',
+        # 1. JQL Nativa sem trava rígida de horas na data (usando aspas simples)
+        "project in (TICKET, ECOIT) AND (cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') OR labels in ('Ecommerce-Sistemas', 'Ecommerce') OR 'Request Type' = 'Intercom Incidentes') ORDER BY created DESC",
         
-        # 2. Busca direta por customfield
-        'cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC',
+        # 2. Apenas pelos Projetos
+        "project in (TICKET, ECOIT) ORDER BY created DESC",
         
-        # 3. Busca por Projetos
-        'project in (TICKET, ECOIT) AND created >= "2026-01-01" ORDER BY created DESC'
+        # 3. Apenas pelo Custom Field
+        "cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') ORDER BY created DESC"
     ]
 
     for idx, jql in enumerate(queries, 1):
@@ -348,7 +349,7 @@ def gerar_pagina_html(products_data):
       </div>
       <div class="flex items-center gap-3">
         <button onclick="window.print()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-sm font-medium transition flex items-center gap-2 shadow-lg">
-          🖨️️ Imprimir / PDF
+          🖨 Imprimir / PDF
         </button>
       </div>
     </header>
