@@ -249,7 +249,7 @@ def buscar_dados_jira():
     
     # 🎯 CONSULTA AMPLA PARA GARANTIR RETORNO DE CHAMADOS
     # Se quiser testar o filtro do grupo exatamente, coloque a JQL do Jira aqui:
-    jql_query = "ORDER BY created DESC"
+    jql_query = "project IS NOT NULL AND 'Grupo Solucionador' in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') AND created >= '2026-01-01' ORDER BY created DESC"
     
     params = {
         "jql": jql_query,
