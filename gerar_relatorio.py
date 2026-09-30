@@ -248,17 +248,18 @@ def buscar_dados_jira():
     auth = (email, token)
     headers = {"Accept": "application/json"}
     
-    # JQL simplificada e 100% tratada para a API REST sem restrições de formatação
-    jql_query = '"Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01"'
+    # 🎯 JQL NATIVA EXATA (Usando POST para evitar limites de tamanho e aspas na URL)
+    jql_query = """project in (TICKET, ECOIT) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR "Grupo Solucionador (Assets)" in ("ari:cloud:cmdb::object/c60d6c60-69dc-4eb6-a336-743a702ef727/73986", "ari:cloud:cmdb::object/c60d6c60-69dc-4eb6-a336-743a702ef727/73985") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC"""
     
-    params = {
+    payload = {
         "jql": jql_query,
         "maxResults": 2000,
         "fields": ["summary", "status", "components", "created", "priority"]
     }
 
     try:
-        response = requests.get(url, headers=headers, auth=auth, params=params)
+        # Usamos POST em vez de GET para enviar queries JQL complexas com segurança total
+        response = requests.post(url, headers=headers, auth=auth, json=payload)
         print(f"Status Code da API Jira: {response.status_code}")
         
         if response.status_code != 200:
@@ -268,20 +269,10 @@ def buscar_dados_jira():
         issues = response.json().get("issues", [])
         
         if len(issues) > 0:
-            print(f"Sucesso! {len(issues)} chamados obtidos dos grupos solucionadores no Jira.")
+            print(f"Sucesso Total! {len(issues)} chamados obtidos com a JQL Nativa.")
             return processar_chamados_jira(issues)
         else:
-            print("Tentando JQL sem aspas no campo customizado como plano B...")
-            # Tentativa B sem aspas internas no campo para compatibilidade com Jira Cloud
-            jql_query_b = 'created >= "2026-01-01" AND "Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas")'
-            resp_b = requests.get(url, headers=headers, auth=auth, params={"jql": jql_query_b, "maxResults": 2000})
-            issues_b = resp_b.json().get("issues", []) if resp_b.status_code == 200 else []
-            
-            if len(issues_b) > 0:
-                print(f"Sucesso no Plano B! {len(issues_b)} chamados obtidos.")
-                return processar_chamados_jira(issues_b)
-            
-            print("Aviso: Nenhuma das consultas retornou chamados do Jira. Mantendo base consolidada.")
+            print("Aviso: A consulta retornou 0 chamados. Mantendo a base de contingência.")
             return processar_dados_padrao()
             
     except Exception as e:
