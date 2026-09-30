@@ -1,0 +1,38 @@
+name: Pipeline do Relatorio de Sustentacao
+
+on:
+  schedule:
+    # Atualiza automaticamente de hora em hora entre 08:00 e 18:00 (Seg-Sex)
+    - cron: '0 11-21 * * 1-5'
+  workflow_dispatch: # Permite disparar manualmente com um clique de botão
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar Código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Instalar Biblioteca Requests e Gerar HTML
+        env:
+          JIRA_DOMAIN: ${{ secrets.JIRA_DOMAIN }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          pip install requests
+          python gerar_relatorio.py
+
+      - name: Publicar HTML no GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          destination_dir: ./
