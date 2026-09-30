@@ -3,7 +3,6 @@ import json
 import requests
 from datetime import datetime
 
-# Mapeamento do Jira para as 11 Chaves de Produtos
 MAPEAMENTO_PRODUTOS = {
     "mensalista": {
         "name": "Mensalista Digital & Estapar",
@@ -248,8 +247,8 @@ def buscar_dados_jira():
     auth = (email, token)
     headers = {"Accept": "application/json"}
     
-    # 🎯 FILTRO EXCLUSIVO PELO SEU CAMPO DE GRUPO SOLUCIONADOR NO JIRA
-    jql_query = """ "Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01 00:00" ORDER BY created DESC """
+    # Sintaxe JQL tratada com aspas simples para compatibilidade total com a API REST
+    jql_query = " 'Grupo Solucionador' in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') AND created >= '2026-01-01' ORDER BY created DESC "
     
     params = {
         "jql": jql_query,
@@ -259,18 +258,23 @@ def buscar_dados_jira():
 
     try:
         response = requests.get(url, headers=headers, auth=auth, params=params)
-        response.raise_for_status()
+        print(f"Status Code da API Jira: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"Erro na resposta da API Jira: {response.text}")
+            return processar_dados_padrao()
+            
         issues = response.json().get("issues", [])
         
         if len(issues) > 0:
             print(f"Sucesso! {len(issues)} chamados obtidos dos grupos solucionadores no Jira.")
             return processar_chamados_jira(issues)
         else:
-            print("Aviso: Nenhum chamado encontrado na JQL. Carregando base consolidada.")
+            print("Aviso: A consulta JQL retornou 0 chamados. Verifique a nomenclatura exata do campo no Jira.")
             return processar_dados_padrao()
             
     except Exception as e:
-        print(f"Aviso ao consultar Jira: {e}. Mantendo base consolidada.")
+        print(f"Erro de conexão com o Jira: {e}. Mantendo base consolidada.")
         return processar_dados_padrao()
 
 def gerar_pagina_html(products_data):
