@@ -3,6 +3,7 @@ import json
 import requests
 from datetime import datetime
 
+# Mapeamento do Jira para as 11 Chaves de Produtos
 MAPEAMENTO_PRODUTOS = {
     "mensalista": {
         "name": "Mensalista Digital & Estapar",
@@ -234,6 +235,40 @@ def processar_dados_padrao():
       }
     }
 
+def executar_busca(url, headers, auth, jql):
+    issues_totais = []
+    next_page_token = None
+
+    while True:
+        payload = {
+            "jql": jql,
+            "maxResults": 100,
+            "fields": ["summary", "status", "components", "created", "priority"]
+        }
+        if next_page_token:
+            payload["nextPageToken"] = next_page_token
+
+        try:
+            resp = requests.post(url, headers=headers, auth=auth, json=payload)
+            if resp.status_code != 200:
+                print(f"Erro {resp.status_code} na query: {resp.text[:100]}")
+                break
+
+            data = resp.json()
+            issues = data.get("issues", [])
+            if not issues:
+                break
+
+            issues_totais.extend(issues)
+            next_page_token = data.get("nextPageToken")
+            if not next_page_token:
+                break
+        except Exception as e:
+            print(f"Exceção na busca: {e}")
+            break
+
+    return issues_totais
+
 def buscar_dados_jira():
     domain = os.environ.get("JIRA_DOMAIN")
     email = os.environ.get("JIRA_EMAIL")
@@ -250,53 +285,27 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
     
-    # JQL com aspas simples internas limpas e data relativa de 365 dias para evitar problemas de fuso
-    jql_query = "project in (TICKET, ECOIT) AND (cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') OR labels in ('Ecommerce-Sistemas', 'Ecommerce') OR 'Request Type' = 'Intercom Incidentes') AND created >= -365d ORDER BY created DESC"
-
-    issues_totais = []
-    next_page_token = None
-
-    while True:
-        payload = {
-            "jql": jql_query,
-            "maxResults": 100,
-            "fields": ["summary", "status", "components", "created", "priority"]
-        }
+    # Tentativas de JQL progressivas (da mais específica para a mais ampla)
+    queries = [
+        # 1. JQL Nativa completa com datas formatadas sem hora
+        'project in (TICKET, ECOIT) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01" ORDER BY created DESC',
         
-        if next_page_token:
-            payload["nextPageToken"] = next_page_token
+        # 2. Busca direta por customfield
+        'cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC',
+        
+        # 3. Busca por Projetos
+        'project in (TICKET, ECOIT) AND created >= "2026-01-01" ORDER BY created DESC'
+    ]
 
-        try:
-            resp = requests.post(url, headers=headers, auth=auth, json=payload)
-            print(f"Status Code da API Jira: {resp.status_code}")
-            
-            if resp.status_code != 200:
-                print(f"Erro na resposta da API: {resp.text}")
-                break
+    for idx, jql in enumerate(queries, 1):
+        print(f"Executando tentativa JQL #{idx}...")
+        issues = executar_busca(url, headers, auth, jql)
+        if len(issues) > 0:
+            print(f"🎉 SUCESSO REAL! {len(issues)} chamados retornados na tentativa #{idx}.")
+            return processar_chamados_jira(issues)
 
-            data = resp.json()
-            issues = data.get("issues", [])
-            print(f"Lote recebido: {len(issues)} chamados.")
-            
-            if not issues:
-                break
-
-            issues_totais.extend(issues)
-            next_page_token = data.get("nextPageToken")
-            
-            if not next_page_token:
-                break
-
-        except Exception as e:
-            print(f"Erro na execução da requisição: {e}")
-            break
-
-    if len(issues_totais) > 0:
-        print(f"🎉 SUCESSO REAL! {len(issues_totais)} chamados retornados da API do Jira.")
-        return processar_chamados_jira(issues_totais)
-    else:
-        print("Aviso: A consulta retornou 0 chamados. Mantendo base de contingência.")
-        return processar_dados_padrao()
+    print("Aviso: Nenhuma das consultas JQL retornou resultados. Mantendo base de contingência.")
+    return processar_dados_padrao()
 
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
@@ -339,7 +348,7 @@ def gerar_pagina_html(products_data):
       </div>
       <div class="flex items-center gap-3">
         <button onclick="window.print()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-sm font-medium transition flex items-center gap-2 shadow-lg">
-          🖨️ Imprimir / PDF
+          🖨️️ Imprimir / PDF
         </button>
       </div>
     </header>
