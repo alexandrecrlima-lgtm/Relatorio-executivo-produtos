@@ -3,34 +3,107 @@ import json
 import requests
 from datetime import datetime
 
-JIRA_DOMAIN = os.environ.get("JIRA_DOMAIN")
-JIRA_EMAIL = os.environ.get("JIRA_EMAIL")
-JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN")
-
-def buscar_dados_jira():
-    if not JIRA_DOMAIN or not JIRA_API_TOKEN:
-        print("Aviso: Variáveis de ambiente não encontradas. Usando dados mockados.")
-        return processar_dados_padrao()
-
-    url = f"https://{JIRA_DOMAIN}/rest/api/3/search/jql"
-    auth = (JIRA_EMAIL, JIRA_API_TOKEN)
-    headers = {"Accept": "application/json"}
-    
-    jql_query = "project = 'SUPORTE' ORDER BY created DESC"
-    params = {
-        "jql": jql_query,
-        "maxResults": 100,
-        "fields": ["summary", "status", "priority"]
+# Mapeamento do Jira para as 11 Chaves de Produtos
+MAPEAMENTO_PRODUTOS = {
+    "mensalista": {
+        "name": "Mensalista Digital & Estapar",
+        "keywords": ["mensalista", "credencial", "estapar digital"]
+    },
+    "za": {
+        "name": "Estacionamento Rotativo / Zona Azul",
+        "keywords": ["zona azul", "rotativo", "cad", "fiscalizacao"]
+    },
+    "login": {
+        "name": "Login, Cadastro & Acesso Zul+",
+        "keywords": ["login", "cadastro", "sms", "token", "senha", "conta"]
+    },
+    "tag": {
+        "name": "Tag de Pedágio & Extensão Zul",
+        "keywords": ["tag", "pedagio", "recarga tag"]
+    },
+    "reserva": {
+        "name": "Estapar Reserva & Pátios",
+        "keywords": ["reserva", "porto seguro", "patio", "vaga"]
+    },
+    "pay": {
+        "name": "Estapar Pay / Pagar Estacionamento",
+        "keywords": ["pay", "pagar estacionamento", "qr code", "pix"]
+    },
+    "tributos": {
+        "name": "Tributos (Multas, IPVA & CRLV)",
+        "keywords": ["tributo", "multa", "ipva", "crlv", "detran"]
+    },
+    "seguro": {
+        "name": "Seguro Auto & Proteção",
+        "keywords": ["seguro", "apolice", "sinistro"]
+    },
+    "baterias": {
+        "name": "Baterias Moura & Parceiros",
+        "keywords": ["bateria", "moura", "instalacao"]
+    },
+    "frotistas": {
+        "name": "Frotistas & Gestão B2B",
+        "keywords": ["frotista", "b2b", "frota", "corporativo"]
+    },
+    "sustentacao": {
+        "name": "Suporte Operacional & Sustentação N3",
+        "keywords": ["sustentacao", "banco", "script", "api", "n3", "logs"]
     }
+}
 
-    try:
-        response = requests.get(url, headers=headers, auth=auth, params=params)
-        response.raise_for_status()
-        print("Dados consultados com sucesso no Jira!")
-    except Exception as e:
-        print(f"Erro ao consultar API do Jira: {e}")
-    
-    return processar_dados_padrao()
+def categorizar_chamado(issue):
+    fields = issue.get("fields", {})
+    components = [c.get("name", "").lower() for c in fields.get("components", [])]
+    summary = fields.get("summary", "").lower()
+    texto_busca = " ".join(components) + " " + summary
+
+    for key, info in MAPEAMENTO_PRODUTOS.items():
+        for kw in info["keywords"]:
+            if kw in texto_busca:
+                return key
+    return "sustentacao"
+
+def processar_chamados_jira(issues):
+    products_data = {}
+    for key, info in MAPEAMENTO_PRODUTOS.items():
+        products_data[key] = {
+            "name": info["name"],
+            "total": 0,
+            "sla": "95,0%",
+            "mttr": "18,0 h",
+            "months": [0] * 9,
+            "motives_map": {}
+        }
+
+    for issue in issues:
+        fields = issue.get("fields", {})
+        cat_key = categorizar_chamado(issue)
+        
+        created_str = fields.get("created", "")
+        if created_str:
+            dt = datetime.strptime(created_str[:10], "%Y-%m-%d")
+            mes_index = dt.month - 1
+            if 0 <= mes_index <= 8:
+                products_data[cat_key]["months"][mes_index] += 1
+
+        products_data[cat_key]["total"] += 1
+        
+        resumo = fields.get("summary", "Outros Chamados")
+        motivos = products_data[cat_key]["motives_map"]
+        motivos[resumo] = motivos.get(resumo, 0) + 1
+
+    for key, prod in products_data.items():
+        total_prod = prod["total"] if prod["total"] > 0 else 1
+        motivos_ordenados = sorted(prod["motives_map"].items(), key=lambda x: x[1], reverse=True)[:5]
+        
+        prod["motives"] = []
+        for nome_motivo, qtd in motivos_ordenados:
+            pct = f"{((qtd / total_prod) * 100):.1f}%"
+            prod["motives"].append({"name": nome_motivo, "qty": qtd, "pct": pct})
+        
+        del prod["motives_map"]
+
+    return products_data
 
 def processar_dados_padrao():
     return {
@@ -158,6 +231,32 @@ def processar_dados_padrao():
         ]
       }
     }
+
+def buscar_dados_jira():
+    if not os.environ.get("JIRA_DOMAIN") or not os.environ.get("JIRA_API_TOKEN"):
+        print("Aviso: Chaves do Jira não configuradas nos Secrets. Mantendo dados padrão.")
+        return processar_dados_padrao()
+
+    url = f"https://{os.environ.get('JIRA_DOMAIN')}/rest/api/3/search/jql"
+    auth = (os.environ.get("JIRA_EMAIL"), os.environ.get("JIRA_API_TOKEN"))
+    headers = {"Accept": "application/json"}
+    
+    jql_query = "project = 'SUPORTE' AND created >= '2026-01-01' ORDER BY created DESC"
+    params = {
+        "jql": jql_query,
+        "maxResults": 2000,
+        "fields": ["summary", "status", "components", "created", "priority"]
+    }
+
+    try:
+        response = requests.get(url, headers=headers, auth=auth, params=params)
+        response.raise_for_status()
+        issues = response.json().get("issues", [])
+        print(f"Sucesso! {len(issues)} chamados retornados da API do Jira.")
+        return processar_chamados_jira(issues)
+    except Exception as e:
+        print(f"Erro na chamada da API: {e}. Usando dados de contingência.")
+        return processar_dados_padrao()
 
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
