@@ -248,8 +248,8 @@ def buscar_dados_jira():
     auth = (email, token)
     headers = {"Accept": "application/json"}
     
-    # 🎯 FILTRO EXCLUSIVO PELOS SEUS 3 GRUPOS SOLUCIONADORES OFICIAIS
-    jql_query = 'component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC'
+    # 🎯 FILTRO EXCLUSIVO PELO SEU CAMPO DE GRUPO SOLUCIONADOR NO JIRA
+    jql_query = """ "Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01 00:00" ORDER BY created DESC """
     
     params = {
         "jql": jql_query,
@@ -266,7 +266,7 @@ def buscar_dados_jira():
             print(f"Sucesso! {len(issues)} chamados obtidos dos grupos solucionadores no Jira.")
             return processar_chamados_jira(issues)
         else:
-            print("Aviso: Nenhum chamado encontrado para esses componentes específicos na JQL. Carregando base consolidada.")
+            print("Aviso: Nenhum chamado encontrado na JQL. Carregando base consolidada.")
             return processar_dados_padrao()
             
     except Exception as e:
