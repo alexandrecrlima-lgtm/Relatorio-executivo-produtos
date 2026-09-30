@@ -249,7 +249,13 @@ def buscar_dados_jira():
     headers = {"Accept": "application/json"}
     
     # 🎯 FILTRO EXCLUSIVO PELOS SEUS 3 GRUPOS SOLUCIONADORES OFICIAIS
-    jql_query = 'component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC'
+    jql_query = '"Grupo Solucionador" in (
+    "Ecommerce - Suporte Sistemas", 
+    "Ecommerce - Suporte Sistemas N3", 
+    "Sustentação Intercom - Suporte Sistemas"
+)
+AND created >= "2026-01-01 00:00"
+ORDER BY created DESC'
     
     params = {
         "jql": jql_query,
