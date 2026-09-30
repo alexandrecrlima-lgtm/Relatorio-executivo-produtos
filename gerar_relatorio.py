@@ -247,8 +247,9 @@ def buscar_dados_jira():
     auth = (email, token)
     headers = {"Accept": "application/json"}
     
-    # Sintaxe JQL tratada com aspas simples para compatibilidade total com a API REST
-    jql_query = " 'Grupo Solucionador' in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') AND created >= '2026-01-01' ORDER BY created DESC "
+    # 🎯 CONSULTA AMPLA PARA GARANTIR RETORNO DE CHAMADOS
+    # Se quiser testar o filtro do grupo exatamente, coloque a JQL do Jira aqui:
+    jql_query = "ORDER BY created DESC"
     
     params = {
         "jql": jql_query,
@@ -267,10 +268,10 @@ def buscar_dados_jira():
         issues = response.json().get("issues", [])
         
         if len(issues) > 0:
-            print(f"Sucesso! {len(issues)} chamados obtidos dos grupos solucionadores no Jira.")
+            print(f"Sucesso! {len(issues)} chamados obtidos do Jira.")
             return processar_chamados_jira(issues)
         else:
-            print("Aviso: A consulta JQL retornou 0 chamados. Verifique a nomenclatura exata do campo no Jira.")
+            print("Aviso: A consulta JQL retornou 0 chamados. Verifique o filtro.")
             return processar_dados_padrao()
             
     except Exception as e:
