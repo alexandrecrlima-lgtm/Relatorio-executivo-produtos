@@ -3,7 +3,6 @@ import json
 import requests
 from datetime import datetime
 
-# Mapeamento do Jira para as 11 Chaves de Produtos
 MAPEAMENTO_PRODUTOS = {
     "mensalista": {
         "name": "Mensalista Digital & Estapar",
@@ -251,20 +250,19 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
     
-    jql_query = 'project in (TICKET, ECOIT) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
+    # JQL com aspas simples internas limpas e data relativa de 365 dias para evitar problemas de fuso
+    jql_query = "project in (TICKET, ECOIT) AND (cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') OR labels in ('Ecommerce-Sistemas', 'Ecommerce') OR 'Request Type' = 'Intercom Incidentes') AND created >= -365d ORDER BY created DESC"
 
     issues_totais = []
     next_page_token = None
 
     while True:
-        # Payload com a chave exata 'jql' conforme exigido pela v3
         payload = {
             "jql": jql_query,
             "maxResults": 100,
             "fields": ["summary", "status", "components", "created", "priority"]
         }
         
-        # Só adiciona nextPageToken se realmente existir um valor válido
         if next_page_token:
             payload["nextPageToken"] = next_page_token
 
@@ -278,12 +276,14 @@ def buscar_dados_jira():
 
             data = resp.json()
             issues = data.get("issues", [])
+            print(f"Lote recebido: {len(issues)} chamados.")
+            
             if not issues:
                 break
 
             issues_totais.extend(issues)
-            
             next_page_token = data.get("nextPageToken")
+            
             if not next_page_token:
                 break
 
