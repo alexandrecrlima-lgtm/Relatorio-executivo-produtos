@@ -235,41 +235,6 @@ def processar_dados_padrao():
       }
     }
 
-def executar_busca_jira(url, auth, headers, jql):
-    issues_totais = []
-    start_at = 0
-    max_results = 100
-
-    while True:
-        params = {
-            "jql": jql,
-            "startAt": start_at,
-            "maxResults": max_results,
-            "fields": "summary,status,components,created,priority"
-        }
-        try:
-            resp = requests.get(url, headers=headers, auth=auth, params=params)
-            if resp.status_code != 200:
-                print(f"Aviso HTTP {resp.status_code} na query: {jql[:60]}... -> {resp.text[:100]}")
-                break
-            
-            data = resp.json()
-            issues = data.get("issues", [])
-            if not issues:
-                break
-                
-            issues_totais.extend(issues)
-            start_at += len(issues)
-            
-            total_jira = data.get("total", len(issues_totais))
-            if len(issues_totais) >= total_jira:
-                break
-        except Exception as e:
-            print(f"Erro na requisição: {e}")
-            break
-
-    return issues_totais
-
 def buscar_dados_jira():
     domain = os.environ.get("JIRA_DOMAIN")
     email = os.environ.get("JIRA_EMAIL")
@@ -279,31 +244,58 @@ def buscar_dados_jira():
         print("Aviso: Chaves do Jira não configuradas. Carregando dados de demonstração.")
         return processar_dados_padrao()
 
-    url = f"https://{domain}/rest/api/3/search"
+    # Rota oficial nova exata exigida pela Atlassian
+    url = f"https://{domain}/rest/api/3/search/jql"
     auth = (email, token)
-    headers = {"Accept": "application/json"}
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+    }
     
-    # 🎯 ESTRATÉGIA DE RETENTATIVAS COM JQL PROGRESSIVA
-    queries = [
-        # Opção 1: JQL Nativa sem referências a URIs de CMDB/Assets (que travam a API REST)
-        'project in (TICKET, ECOIT) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce")) AND created >= "2026-01-01 00:00" ORDER BY created DESC',
-        
-        # Opção 2: Busca Direta pelos Projetos
-        'project in (TICKET, ECOIT) AND created >= "2026-01-01 00:00" ORDER BY created DESC',
-        
-        # Opção 3: Busca Ampla
-        'created >= "2026-01-01 00:00" ORDER BY created DESC'
-    ]
+    # JQL nativa enviada via POST
+    jql_query = 'project in (TICKET, ECOIT) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
 
-    for idx, jql in enumerate(queries, 1):
-        print(f"Tentando Consulta JQL #{idx}...")
-        issues = executar_busca_jira(url, auth, headers, jql)
-        if len(issues) > 0:
-            print(f"🎉 SUCESSO REAL! {len(issues)} chamados retornados da API do Jira na Consulta #{idx}.")
-            return processar_chamados_jira(issues)
+    issues_totais = []
+    next_page_token = None
 
-    print("Aviso: Todas as tentativas retornaram 0 chamados. Mantendo base consolidada.")
-    return processar_dados_padrao()
+    while True:
+        payload = {
+            "query": jql_query,
+            "maxResults": 100,
+            "fields": ["summary", "status", "components", "created", "priority"]
+        }
+        if next_page_token:
+            payload["nextPageToken"] = next_page_token
+
+        try:
+            resp = requests.post(url, headers=headers, auth=auth, json=payload)
+            print(f"Status Code da API Jira: {resp.status_code}")
+            
+            if resp.status_code != 200:
+                print(f"Erro na resposta da API: {resp.text}")
+                break
+
+            data = resp.json()
+            issues = data.get("issues", [])
+            if not issues:
+                break
+
+            issues_totais.extend(issues)
+            next_page_token = data.get("nextPageToken")
+            
+            if not next_page_token:
+                break
+
+        except Exception as e:
+            print(f"Erro na execução da requisição: {e}")
+            break
+
+    if len(issues_totais) > 0:
+        print(f"🎉 SUCESSO REAL! {len(issues_totais)} chamados retornados da API do Jira.")
+        return processar_chamados_jira(issues_totais)
+    else:
+        print("Aviso: A consulta retornou 0 chamados. Mantendo base de contingência.")
+        return processar_dados_padrao()
 
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
