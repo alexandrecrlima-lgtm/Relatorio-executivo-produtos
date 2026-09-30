@@ -244,7 +244,6 @@ def buscar_dados_jira():
         print("Aviso: Chaves do Jira não configuradas. Carregando dados de demonstração.")
         return processar_dados_padrao()
 
-    # Rota oficial nova exata exigida pela Atlassian
     url = f"https://{domain}/rest/api/3/search/jql"
     auth = (email, token)
     headers = {
@@ -252,18 +251,20 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
     
-    # JQL nativa enviada via POST
     jql_query = 'project in (TICKET, ECOIT) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
 
     issues_totais = []
     next_page_token = None
 
     while True:
+        # Payload com a chave exata 'jql' conforme exigido pela v3
         payload = {
-            "query": jql_query,
+            "jql": jql_query,
             "maxResults": 100,
             "fields": ["summary", "status", "components", "created", "priority"]
         }
+        
+        # Só adiciona nextPageToken se realmente existir um valor válido
         if next_page_token:
             payload["nextPageToken"] = next_page_token
 
@@ -281,8 +282,8 @@ def buscar_dados_jira():
                 break
 
             issues_totais.extend(issues)
-            next_page_token = data.get("nextPageToken")
             
+            next_page_token = data.get("nextPageToken")
             if not next_page_token:
                 break
 
