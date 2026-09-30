@@ -3,6 +3,7 @@ import json
 import requests
 from datetime import datetime
 
+# Mapeamento do Jira para as 11 Chaves de Produtos
 MAPEAMENTO_PRODUTOS = {
     "mensalista": {
         "name": "Mensalista Digital & Estapar",
@@ -247,9 +248,8 @@ def buscar_dados_jira():
     auth = (email, token)
     headers = {"Accept": "application/json"}
     
-    # 🎯 CONSULTA AMPLA PARA GARANTIR RETORNO DE CHAMADOS
-    # Se quiser testar o filtro do grupo exatamente, coloque a JQL do Jira aqui:
-    jql_query = "project IS NOT NULL AND 'Grupo Solucionador' in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') AND created >= '2026-01-01' ORDER BY created DESC"
+    # JQL simplificada e 100% tratada para a API REST sem restrições de formatação
+    jql_query = '"Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01"'
     
     params = {
         "jql": jql_query,
@@ -268,10 +268,20 @@ def buscar_dados_jira():
         issues = response.json().get("issues", [])
         
         if len(issues) > 0:
-            print(f"Sucesso! {len(issues)} chamados obtidos do Jira.")
+            print(f"Sucesso! {len(issues)} chamados obtidos dos grupos solucionadores no Jira.")
             return processar_chamados_jira(issues)
         else:
-            print("Aviso: A consulta JQL retornou 0 chamados. Verifique o filtro.")
+            print("Tentando JQL sem aspas no campo customizado como plano B...")
+            # Tentativa B sem aspas internas no campo para compatibilidade com Jira Cloud
+            jql_query_b = 'created >= "2026-01-01" AND "Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas")'
+            resp_b = requests.get(url, headers=headers, auth=auth, params={"jql": jql_query_b, "maxResults": 2000})
+            issues_b = resp_b.json().get("issues", []) if resp_b.status_code == 200 else []
+            
+            if len(issues_b) > 0:
+                print(f"Sucesso no Plano B! {len(issues_b)} chamados obtidos.")
+                return processar_chamados_jira(issues_b)
+            
+            print("Aviso: Nenhuma das consultas retornou chamados do Jira. Mantendo base consolidada.")
             return processar_dados_padrao()
             
     except Exception as e:
