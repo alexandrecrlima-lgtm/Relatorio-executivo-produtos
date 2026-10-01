@@ -70,7 +70,7 @@ def processar_chamados_jira(issues):
             "total": 0,
             "sla": "94,5%",
             "mttr": "16,8 h",
-            "months": [0] * 9,
+            "months": [0] * 12, # Suporta os 12 meses do ano
             "motives_map": {}
         }
 
@@ -83,7 +83,7 @@ def processar_chamados_jira(issues):
             try:
                 dt = datetime.strptime(created_str[:10], "%Y-%m-%d")
                 mes_index = dt.month - 1
-                if 0 <= mes_index <= 8:
+                if 0 <= mes_index < 12:
                     products_data[cat_key]["months"][mes_index] += 1
             except Exception:
                 pass
@@ -103,6 +103,8 @@ def processar_chamados_jira(issues):
             pct = f"{((qtd / total_prod) * 100):.1f}%"
             prod["motives"].append({"name": nome_motivo, "qty": qtd, "pct": pct})
         
+        # Ajusta para os 9 meses do gráfico se necessário
+        prod["months"] = prod["months"][:9]
         del prod["motives_map"]
 
     return products_data
@@ -236,84 +238,81 @@ def processar_dados_padrao():
 
 def executar_busca(url, headers, auth, jql):
     issues_totais = []
-    next_page_token = None
+    start_at = 0
+    max_results = 50
 
     while True:
         payload = {
             "jql": jql,
-            "maxResults": 100,
+            "startAt": start_at,
+            "maxResults": max_results,
             "fields": ["summary", "status", "components", "created", "priority"]
         }
-        if next_page_token:
-            payload["nextPageToken"] = next_page_token
 
         try:
-            resp = requests.post(url, headers=headers, auth=auth, json=payload)
+            resp = requests.post(url, headers=headers, auth=auth, json=payload, timeout=30)
             if resp.status_code != 200:
-                print(f"Status HTTP {resp.status_code} na query: {resp.text[:150]}")
+                print(f"❌ Status HTTP {resp.status_code} na query: {resp.text[:150]}")
                 break
 
             data = resp.json()
             issues = data.get("issues", [])
-            print(f"Response ok. Chamados no lote atual: {len(issues)}")
+            total = data.get("total", 0)
             
             if not issues:
                 break
 
             issues_totais.extend(issues)
-            next_page_token = data.get("nextPageToken")
-            if not next_page_token:
+            print(f"Progresso: {len(issues_totais)} de {total} chamados carregados...")
+            
+            start_at += len(issues)
+            if start_at >= total:
                 break
         except Exception as e:
-            print(f"Exceção na requisição: {e}")
+            print(f"❌ Exceção na requisição: {e}")
             break
 
     return issues_totais
 
 def buscar_dados_jira():
-    domain = os.environ.get("JIRA_DOMAIN")
+    domain = os.environ.get("JIRA_DOMAIN", "estapar.atlassian.net")
     email = os.environ.get("JIRA_EMAIL")
     token = os.environ.get("JIRA_API_TOKEN")
 
-    if not domain or not token:
-        print("Aviso: Chaves do Jira não configuradas. Carregando dados de demonstração.")
+    if not email or not token:
+        print("⚠️ Aviso: JIRA_EMAIL ou JIRA_API_TOKEN não configurados. Carregando dados de contingência.")
         return processar_dados_padrao()
 
-    url = f"https://{domain}/rest/api/3/search/jql"
+    # Endpoint oficial de busca da API v3 do Jira Cloud
+    url = f"https://{domain}/rest/api/3/search"
     auth = (email, token)
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    
-    # 🎯 TESTE PROGRESSIVO DE QUERIES (Mais restrita -> Mais ampla)
+
+    # Queries ordenadas por abrangência
     queries = [
-        # 1. JQL Nativa sem trava rígida de horas na data (usando aspas simples)
-        "project in (TICKET, ECOIT) AND (cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') OR labels in ('Ecommerce-Sistemas', 'Ecommerce') OR 'Request Type' = 'Intercom Incidentes') ORDER BY created DESC",
-        
-        # 2. Apenas pelos Projetos
-        "project in (TICKET, ECOIT) ORDER BY created DESC",
-        
-        # 3. Apenas pelo Custom Field
-        "cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') ORDER BY created DESC"
+        # Query 1: Projetos e Grupos Oficiais
+        'project in (TICKET, ECOIT) AND ("Segurança" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01" ORDER BY created DESC',
+        # Query 2: Busca por Projeto
+        'project in (TICKET, ECOIT) AND created >= "2026-01-01" ORDER BY created DESC'
     ]
 
     for idx, jql in enumerate(queries, 1):
-        print(f"Executando tentativa JQL #{idx}...")
+        print(f"🔍 Executando tentativa JQL #{idx}...")
         issues = executar_busca(url, headers, auth, jql)
         if len(issues) > 0:
             print(f"🎉 SUCESSO REAL! {len(issues)} chamados retornados na tentativa #{idx}.")
             return processar_chamados_jira(issues)
 
-    print("Aviso: Nenhuma das consultas JQL retornou resultados. Mantendo base de contingência.")
+    print("⚠️ Aviso: Nenhuma das consultas JQL retornou resultados. Mantendo base de contingência.")
     return processar_dados_padrao()
 
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
-    
     total_chamados_ano = sum(p["total"] for p in products_data.values())
     total_chamados_fmt = f"{total_chamados_ano:,}".replace(",", ".")
-
     products_json = json.dumps(products_data, ensure_ascii=False)
 
     template = """<!DOCTYPE html>
