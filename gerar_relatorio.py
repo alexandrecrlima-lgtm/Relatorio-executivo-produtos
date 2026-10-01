@@ -1,671 +1,103 @@
-import os
+import base64
 import json
-import requests
+import os
+import sys
 from datetime import datetime
+import requests
 
-# ==============================================================================
-# 1. MAPEAMENTO DE PRODUTOS E REGRAS DE CLASSIFICAÇÃO
-# ==============================================================================
-MAPEAMENTO_PRODUTOS = {
-    "mensalista": {
-        "name": "Mensalista Digital & Estapar",
-        "keywords": ["mensalista", "credencial", "estapar digital"]
-    },
-    "za": {
-        "name": "Estacionamento Rotativo / Zona Azul",
-        "keywords": ["zona azul", "rotativo", "cad", "fiscalizacao", "recarga zad"]
-    },
-    "login": {
-        "name": "Login, Cadastro & Acesso Zul+",
-        "keywords": ["login", "cadastro", "sms", "token", "senha", "conta", "e-mail"]
-    },
-    "tag": {
-        "name": "Tag de Pedágio & Extensão Zul",
-        "keywords": ["tag", "pedagio", "recarga tag", "adesivo tag"]
-    },
-    "reserva": {
-        "name": "Estapar Reserva & Pátios",
-        "keywords": ["reserva", "porto seguro", "patio", "vaga", "aeroporto", "arena"]
-    },
-    "pay": {
-        "name": "Estapar Pay / Pagar Estacionamento",
-        "keywords": ["pay", "pagar estacionamento", "qr code", "pix", "ticket estacionamento"]
-    },
-    "tributos": {
-        "name": "Tributos (Multas, IPVA & CRLV)",
-        "keywords": ["tributo", "multa", "ipva", "crlv", "detran", "licenciamento"]
-    },
-    "seguro": {
-        "name": "Seguro Auto & Proteção",
-        "keywords": ["seguro", "apolice", "sinistro", "protecao"]
-    },
-    "baterias": {
-        "name": "Baterias Moura & Parceiros",
-        "keywords": ["bateria", "moura", "instalacao", "nota fiscal moura"]
-    },
-    "frotistas": {
-        "name": "Frotistas & Gestão B2B",
-        "keywords": ["frotista", "b2b", "frota", "corporativo", "portal corporativo"]
-    },
-    "sustentacao": {
-        "name": "Suporte Operacional & Sustentação N3",
-        "keywords": ["sustentacao", "banco", "script", "api", "n3", "logs", "integracao"]
-    }
+# 1. Obter variáveis de ambiente (GitHub Secrets)
+JIRA_DOMAIN = os.environ.get("JIRA_DOMAIN", "").rstrip("/")
+JIRA_EMAIL = os.environ.get("JIRA_EMAIL", "")
+JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
+
+if not all([JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN]):
+    print("❌ Erro: Variáveis JIRA_DOMAIN, JIRA_EMAIL ou JIRA_API_TOKEN não configuradas.")
+    sys.exit(1)
+
+# 2. Configurar Headers de Autenticação Basic Auth
+auth_str = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_API_TOKEN}".encode("utf-8")).decode("utf-8")
+headers = {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "Authorization": f"Basic {auth_str}",
 }
 
-def categorizar_chamado(issue):
-    fields = issue.get("fields", {})
-    components = [c.get("name", "").lower() for c in fields.get("components", [])]
-    summary = fields.get("summary", "").lower()
-    texto_busca = " ".join(components) + " " + summary
+def fetch_all_jira_issues(jql_query, fields=None):
+    """
+    Busca todas as issues do Jira com suporte a paginação automática via /rest/api/3/search.
+    """
+    if fields is None:
+        fields = [
+            "key", "summary", "status", "assignee", 
+            "reporter", "created", "updated", "resolutiondate", 
+            "priority", "issuetype"
+        ]
 
-    for key, info in MAPEAMENTO_PRODUTOS.items():
-        for kw in info["keywords"]:
-            if kw in texto_busca:
-                return key
-    return "sustentacao"
+    search_url = f"{JIRA_DOMAIN}/rest/api/3/search"
+    start_at = 0
+    max_results = 100
+    all_issues = []
 
-def processar_chamados_jira(issues):
-    products_data = {}
-    for key, info in MAPEAMENTO_PRODUTOS.items():
-        products_data[key] = {
-            "name": info["name"],
-            "total": 0,
-            "sla": "94,3%",
-            "mttr": "16,8 h",
-            "months": [0] * 12,
-            "motives_map": {}
-        }
-
-    for issue in issues:
-        fields = issue.get("fields", {})
-        cat_key = categorizar_chamado(issue)
-        
-        created_str = fields.get("created", "")
-        if created_str:
-            try:
-                dt = datetime.strptime(created_str[:10], "%Y-%m-%d")
-                mes_index = dt.month - 1
-                if 0 <= mes_index < 12:
-                    products_data[cat_key]["months"][mes_index] += 1
-            except Exception:
-                pass
-
-        products_data[cat_key]["total"] += 1
-        
-        resumo = fields.get("summary", "Outros Chamados")
-        motivos = products_data[cat_key]["motives_map"]
-        motivos[resumo] = motivos.get(resumo, 0) + 1
-
-    for key, prod in products_data.items():
-        total_prod = prod["total"] if prod["total"] > 0 else 1
-        motivos_ordenados = sorted(prod["motives_map"].items(), key=lambda x: x[1], reverse=True)[:5]
-        
-        prod["motives"] = []
-        for nome_motivo, qtd in motives_ordenados:
-            pct = f"{((qtd / total_prod) * 100):.1f}%"
-            prod["motives"].append({"name": nome_motivo, "qty": qtd, "pct": pct})
-        
-        # Considera os meses do ano até a data corrente (Jan a Out)
-        prod["months"] = prod["months"][:10]
-        del prod["motives_map"]
-
-    return products_data
-
-def processar_dados_padrao():
-    return {
-        "mensalista": {
-            "name": "Mensalista Digital & Estapar",
-            "total": 2110, "sla": "94,2%", "mttr": "18,4 h (~0,77d)",
-            "months": [200, 195, 174, 315, 332, 444, 196, 109, 145, 0],
-            "motives": [
-                { "name": "Migração / Digitalização de Mensalista", "qty": 955, "pct": "45,3%" },
-                { "name": "Falha de Pagamento / Cartão Recusado", "qty": 464, "pct": "22,0%" },
-                { "name": "Alteração Cadastral / Veículo / Vaga", "qty": 338, "pct": "16,0%" },
-                { "name": "Liberação de Credencial / Tag / Acesso", "qty": 230, "pct": "10,9%" },
-                { "name": "Solicitação de Cancelamento / Reembolso", "qty": 123, "pct": "5,8%" }
-            ]
-        },
-        "za": {
-            "name": "Estacionamento Rotativo / Zona Azul",
-            "total": 1045, "sla": "96,5%", "mttr": "8,2 h (~0,34d)",
-            "months": [95, 80, 107, 65, 98, 122, 112, 154, 212, 0],
-            "motives": [
-                { "name": "Erro ao ativar CAD / Falha de comunicação", "qty": 439, "pct": "42,0%" },
-                { "name": "Solicitação de Estorno / Débito duplicado", "qty": 293, "pct": "28,0%" },
-                { "name": "Consulta de Notificação / Infração", "qty": 188, "pct": "18,0%" },
-                { "name": "Regra de Estacionamento / Horário do Município", "qty": 125, "pct": "12,0%" }
-            ]
-        },
-        "login": {
-            "name": "Login, Cadastro & Acesso Zul+",
-            "total": 988, "sla": "97,8%", "mttr": "6,5 h (~0,27d)",
-            "months": [203, 144, 194, 77, 65, 50, 66, 92, 97, 0],
-            "motives": [
-                { "name": "Não recebi Token / Validação SMS", "qty": 258, "pct": "26,1%" },
-                { "name": "Não recebi E-mail de confirmação", "qty": 176, "pct": "17,8%" },
-                { "name": "Alteração de Telefone de Acesso", "qty": 188, "pct": "19,0%" },
-                { "name": "Alteração de E-mail de Cadastro", "qty": 137, "pct": "13,9%" },
-                { "name": "Falha Login Social (Apple / Google / Face)", "qty": 119, "pct": "12,0%" },
-                { "name": "Conta Bloqueada / Senha Incorreta", "qty": 110, "pct": "11,2%" }
-            ]
-        },
-        "tag": {
-            "name": "Tag de Pedágio & Extensão Zul",
-            "total": 191, "sla": "91,4%", "mttr": "26,0 h (~1,08d)",
-            "months": [24, 19, 28, 18, 21, 17, 19, 23, 22, 0],
-            "motives": [
-                { "name": "Dificuldade na Ativação da Tag", "qty": 84, "pct": "44,0%" },
-                { "name": "Cobrança / Recarga Pendente ou Não Reconhecida", "qty": 55, "pct": "28,8%" },
-                { "name": "Substituição / Envio de Nova Tag", "qty": 33, "pct": "17,3%" },
-                { "name": "Cancelamento da Tag Zul+", "qty": 19, "pct": "9,9%" }
-            ]
-        },
-        "reserva": {
-            "name": "Estapar Reserva & Pátios",
-            "total": 153, "sla": "95,3%", "mttr": "14,0 h (~0,58d)",
-            "months": [15, 12, 18, 14, 19, 16, 18, 21, 20, 0],
-            "motives": [
-                { "name": "Desconto Porto Seguro não aplicado", "qty": 64, "pct": "41,8%" },
-                { "name": "Erro na Validação de Entrada no Pátio", "qty": 46, "pct": "30,1%" },
-                { "name": "Cancelamento / Alteração de Data da Reserva", "qty": 28, "pct": "18,3%" },
-                { "name": "Dúvidas sobre Vaga e Funcionamento", "qty": 15, "pct": "9,8%" }
-            ]
-        },
-        "pay": {
-            "name": "Estapar Pay / Pagar Estacionamento",
-            "total": 99, "sla": "95,8%", "mttr": "11,5 h (~0,48d)",
-            "months": [8, 6, 11, 9, 14, 12, 11, 13, 15, 0],
-            "motives": [
-                { "name": "Erro ao finalizar pagamento (Cartão / PIX)", "qty": 41, "pct": "41,4%" },
-                { "name": "Falha na leitura / Validação do QR Code", "qty": 26, "pct": "26,3%" },
-                { "name": "Solicitação de estorno de duplicidade", "qty": 19, "pct": "19,2%" },
-                { "name": "Integração / Liberação de cancela", "qty": 13, "pct": "13,1%" }
-            ]
-        },
-        "tributos": {
-            "name": "Tributos (Multas, IPVA & CRLV)",
-            "total": 52, "sla": "88,2%", "mttr": "38,5 h (~1,60d)",
-            "months": [7, 5, 6, 4, 6, 5, 7, 6, 6, 0],
-            "motives": [
-                { "name": "Débito pago consta em aberto no DETRAN", "qty": 23, "pct": "44,2%" },
-                { "name": "Atraso no Envio / Disponibilização do CRLV", "qty": 17, "pct": "32,7%" },
-                { "name": "Erro no Parcelamento / Boleto não compensado", "qty": 8, "pct": "15,4%" },
-                { "name": "Divergência de valores e taxas", "qty": 4, "pct": "7,7%" }
-            ]
-        },
-        "seguro": {
-            "name": "Seguro Auto & Proteção",
-            "total": 46, "sla": "93,3%", "mttr": "22,0 h (~0,92d)",
-            "months": [5, 4, 6, 4, 5, 6, 4, 6, 6, 0],
-            "motives": [
-                { "name": "Solicitação de Cancelamento de Apólice", "qty": 20, "pct": "43,5%" },
-                { "name": "Erro na Contratação / Cobrança Indevida", "qty": 13, "pct": "28,3%" },
-                { "name": "Dúvidas sobre Cobertura / Sinistro", "qty": 9, "pct": "19,6%" },
-                { "name": "Falha de Integração com a Seguradora", "qty": 4, "pct": "8,6%" }
-            ]
-        },
-        "baterias": {
-            "name": "Baterias Moura & Parceiros",
-            "total": 31, "sla": "90,0%", "mttr": "32,0 h (~1,33d)",
-            "months": [3, 2, 4, 3, 3, 4, 2, 3, 7, 0],
-            "motives": [
-                { "name": "Carta de Correção / Dados na Nota Fiscal", "qty": 14, "pct": "45,2%" },
-                { "name": "Atraso / Reagendamento de Instalação", "qty": 9, "pct": "29,0%" },
-                { "name": "Erro de Faturamento / Cancelamento de Pedido", "qty": 5, "pct": "16,1%" },
-                { "name": "Garantia e Acionamento de Troca", "qty": 3, "pct": "9,7%" }
-            ]
-        },
-        "frotistas": {
-            "name": "Frotistas & Gestão B2B",
-            "total": 10, "sla": "94,4%", "mttr": "16,0 h (~0,67d)",
-            "months": [1, 1, 1, 1, 1, 1, 1, 1, 2, 0],
-            "motives": [
-                { "name": "Vínculo de Veículo em Frota Corporativa", "qty": 4, "pct": "40,0%" },
-                { "name": "Acesso / Liberação no Portal Corporativo B2B", "qty": 4, "pct": "40,0%" },
-                { "name": "Relatório Consolidado de Faturamento", "qty": 2, "pct": "20,0%" }
-            ]
-        },
-        "sustentacao": {
-            "name": "Suporte Operacional & Sustentação N3",
-            "total": 1880, "sla": "92,6%", "mttr": "22,1 h (~0,92d)",
-            "months": [180, 160, 310, 210, 220, 230, 170, 185, 215, 0],
-            "motives": [
-                { "name": "Correção de Dados / Banco / Script Manual", "qty": 752, "pct": "40,0%" },
-                { "name": "Investigação de Logs / Falha de Integração API", "qty": 564, "pct": "30,0%" },
-                { "name": "Demandas de Testes / Validação de Release", "qty": 376, "pct": "20,0%" },
-                { "name": "Apoio a Outros Departamentos e Transferências", "qty": 188, "pct": "10,0%" }
-            ]
-        }
-    }
-
-# ==============================================================================
-# 2. CONEXÃO COM A NOVA API DO JIRA (ENDPOINT OFICIAL /search/jql)
-# ==============================================================================
-def executar_busca(url, headers, auth, jql):
-    issues_totais = []
-    next_page_token = None
+    print(f"🔍 Executando JQL: {jql_query}")
 
     while True:
         payload = {
-            "jql": jql,
-            "maxResults": 100,
-            "fields": ["summary", "status", "components", "created", "priority"]
+            "jql": jql_query,
+            "startAt": start_at,
+            "maxResults": max_results,
+            "fields": fields,
         }
-        
-        # Paginação por cursor da API v3 moderna
-        if next_page_token:
-            payload["nextPageToken"] = next_page_token
 
         try:
-            resp = requests.post(url, headers=headers, auth=auth, json=payload, timeout=30)
-            if resp.status_code != 200:
-                print(f"❌ Status HTTP {resp.status_code} na query: {resp.text[:200]}")
+            response = requests.post(search_url, json=payload, headers=headers, timeout=30)
+            
+            if response.status_code != 200:
+                print(f"❌ Erro HTTP {response.status_code}: {response.text}")
                 break
 
-            data = resp.json()
+            data = response.json()
             issues = data.get("issues", [])
-            
+            total = data.get("total", 0)
+
             if not issues:
                 break
 
-            issues_totais.extend(issues)
-            print(f"Progresso: {len(issues_totais)} chamados carregados...")
+            all_issues.extend(issues)
+            print(f"   -> Coletados {len(all_issues)} de {total} chamados...")
 
-            next_page_token = data.get("nextPageToken")
-            is_last = data.get("isLast", False)
-            
-            if is_last or not next_page_token:
+            start_at += len(issues)
+            if start_at >= total:
                 break
-                
-        except Exception as e:
-            print(f"❌ Exceção na requisição: {e}")
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Erro na requisição: {e}")
             break
 
-    return issues_totais
+    print(f"✅ Total final coletado: {len(all_issues)} chamados.\n")
+    return all_issues
 
-def buscar_dados_jira():
-    domain = os.environ.get("JIRA_DOMAIN", "estapar.atlassian.net")
-    email = os.environ.get("JIRA_EMAIL")
-    token = os.environ.get("JIRA_API_TOKEN")
+def main():
+    # Defina sua JQL de consulta aqui
+    # Exemplo com grupos de suporte / backlog:
+    jql = (
+        'project = "SAC" '
+        'ORDER BY created DESC'
+    )
 
-    if not email or not token:
-        print("⚠️ Aviso: JIRA_EMAIL ou JIRA_API_TOKEN não configurados. Carregando dados de contingência.")
-        return processar_dados_padrao()
+    issues = fetch_all_jira_issues(jql)
 
-    # Endpoint oficial e obrigatório da API v3 do Jira Cloud
-    url = f"https://{domain}/rest/api/3/search/jql"
-    auth = (email, token)
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
+    if not issues:
+        print("⚠️ Aviso: Nenhuma issue encontrada. Mantendo base anterior.")
+        return
 
-    # Queries formatadas com aspas duplas (compatíveis com o parser da API v3)
-    queries = [
-        # Query 1: Projetos e Grupos Oficiais
-        'project in (TICKET, ECOIT) AND ("Segurança" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01" ORDER BY created DESC',
-        
-        # Query 2: Fallback por Projetos
-        'project in (TICKET, ECOIT) AND created >= "2026-01-01" ORDER BY created DESC'
-    ]
+    # Garante a existência do diretório de saída
+    os.makedirs("data", exist_ok=True)
+    output_file = "data/jira_issues.json"
 
-    for idx, jql in enumerate(queries, 1):
-        print(f"🔍 Executando tentativa JQL #{idx} no endpoint /search/jql...")
-        issues = executar_busca(url, headers, auth, jql)
-        if len(issues) > 0:
-            print(f"🎉 SUCESSO REAL! {len(issues)} chamados retornados na tentativa #{idx}.")
-            return processar_chamados_jira(issues)
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(issues, f, ensure_ascii=False, indent=2)
 
-    print("⚠️ Aviso: Nenhuma das consultas JQL retornou resultados. Mantendo base de contingência.")
-    return processar_dados_padrao()
+    print(f"💾 Dados salvos com sucesso em: {output_file}")
 
-# ==============================================================================
-# 3. GERAÇÃO DO ARQUIVO HTML DARK MODE INTERATIVO
-# ==============================================================================
-def gerar_pagina_html(products_data):
-    data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
-    total_chamados_ano = sum(p["total"] for p in products_data.values())
-    total_chamados_fmt = f"{total_chamados_ano:,}".replace(",", ".")
-    products_json = json.dumps(products_data, ensure_ascii=False)
-
-    template = """<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Relatório Executivo E-Commerce - Visão 2026</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { background-color: #0b0f19; color: #f1f5f9; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    .glass-card { background: rgba(17, 24, 39, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
-    .tab-active { background-color: #2563eb !important; color: #ffffff !important; border-color: #3b82f6 !important; font-weight: 600; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35); }
-    .month-row { cursor: pointer; transition: all 0.2s ease; }
-    .month-row:hover { background-color: rgba(59, 130, 246, 0.15); }
-    .month-active { background-color: rgba(37, 99, 235, 0.3) !important; border-left: 4px solid #60a5fa !important; }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0b0f19; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-  </style>
-</head>
-<body class="p-4 md:p-8">
-  <div class="max-w-7xl mx-auto space-y-6">
-    <header class="flex flex-col md:flex-row justify-between items-start md:items-center glass-card p-6 rounded-2xl shadow-2xl gap-4 border-l-4 border-blue-500">
-      <div>
-        <div class="flex items-center gap-3">
-          <span class="px-3 py-1 text-xs font-semibold rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">Visão Oficial Consolidada 2026</span>
-          <span class="text-xs text-slate-400 font-mono">Última Atualização: __DATA_ATUALIZACAO__</span>
-        </div>
-        <h1 class="text-2xl md:text-3xl font-bold text-white mt-2">Relatório Executivo de Produtos & SLA (Ano Completo)</h1>
-        <p class="text-sm text-slate-400 mt-1">Grupos Oficiais: <span class="text-slate-200">Ecommerce - Suporte Sistemas</span> | <span class="text-slate-200">Ecommerce - Suporte Sistemas N3</span> | <span class="text-slate-200">Sustentação Intercom - Suporte Sistemas</span></p>
-      </div>
-      <div class="flex items-center gap-3">
-        <button onclick="window.print()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-sm font-medium transition flex items-center gap-2 shadow-lg">
-          🖨 Imprimir / PDF
-        </button>
-      </div>
-    </header>
-
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div class="glass-card p-5 rounded-xl border-l-4 border-blue-500">
-        <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">Total de Chamados 2026</span>
-        <div class="text-3xl font-extrabold text-white mt-1">__TOTAL_CHAMADOS__</div>
-        <span class="text-xs text-emerald-400 mt-1 inline-block">100% do Escopo Mapeado</span>
-      </div>
-      <div class="glass-card p-5 rounded-xl border-l-4 border-emerald-500">
-        <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">SLA Médio Global (2026)</span>
-        <div class="text-3xl font-extrabold text-emerald-400 mt-1">94,3%</div>
-        <span class="text-xs text-slate-400 mt-1 inline-block">Meta: ≥ 90,0% (Superada)</span>
-      </div>
-      <div class="glass-card p-5 rounded-xl border-l-4 border-cyan-500">
-        <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">MTTR Médio Geral</span>
-        <div class="text-3xl font-extrabold text-cyan-400 mt-1">16,8 h</div>
-        <span class="text-xs text-slate-400 mt-1 inline-block">~0,70 dias úteis</span>
-      </div>
-      <div class="glass-card p-5 rounded-xl border-l-4 border-indigo-500">
-        <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">Linhas de Produto</span>
-        <div class="text-3xl font-extrabold text-indigo-400 mt-1">11</div>
-        <span class="text-xs text-blue-400 mt-1 inline-block">Detalhamento Mês a Mês</span>
-      </div>
-    </div>
-
-    <div class="glass-card p-3 rounded-xl overflow-x-auto">
-      <div class="flex gap-2 min-w-max" id="productTabs"></div>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="glass-card p-6 rounded-2xl lg:col-span-1 space-y-4">
-        <div class="flex justify-between items-center border-b border-slate-700/60 pb-3">
-          <div>
-            <h2 class="text-lg font-bold text-white" id="prodTitle">Carregando...</h2>
-            <p class="text-xs text-slate-400">💡 Clique em qualquer mês para ver os motivos</p>
-          </div>
-          <button id="resetFilterBtn" onclick="resetMonthFilter()" class="hidden px-2.5 py-1 text-xs font-semibold rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30 transition">
-            ✕ Ver Todos
-          </button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3 py-2">
-          <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/40">
-            <span class="text-[11px] text-slate-400 block font-medium">SLA do Produto</span>
-            <span class="text-xl font-bold text-emerald-400" id="prodSLA">0%</span>
-          </div>
-          <div class="bg-slate-800/60 p-3 rounded-lg border border-slate-700/40">
-            <span class="text-[11px] text-slate-400 block font-medium">MTTR Médio</span>
-            <span class="text-xl font-bold text-cyan-400" id="prodMTTR">0h</span>
-          </div>
-        </div>
-
-        <div class="overflow-hidden rounded-xl border border-slate-800">
-          <table class="w-full text-left text-xs">
-            <thead class="bg-slate-800/80 text-slate-400 font-semibold uppercase">
-              <tr>
-                <th class="p-2.5">Mês (Clique p/ filtrar)</th>
-                <th class="p-2.5 text-right">Chamados</th>
-                <th class="p-2.5 text-right">% Ano</th>
-              </tr>
-            </thead>
-            <tbody id="monthTableBody" class="divide-y divide-slate-800/60"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="glass-card p-6 rounded-2xl lg:col-span-2 space-y-6">
-        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-700/60 pb-3 gap-2">
-          <div>
-            <h3 class="text-lg font-bold text-white flex items-center gap-2">
-              <span id="motivesTitle">Detalhamento de Motivos (Ano 2026)</span>
-            </h3>
-            <p class="text-xs text-slate-400" id="motivesSubtitle">Exibindo distribuição acumulada de todos os meses</p>
-          </div>
-          <span class="text-xs px-2.5 py-1 rounded-md bg-slate-800 text-blue-300 border border-slate-700 font-mono font-bold" id="motivesCount">0 chamados</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-          <div class="h-64 flex items-center justify-center relative">
-            <canvas id="motivesChart"></canvas>
-          </div>
-
-          <div class="overflow-y-auto max-h-64 rounded-xl border border-slate-800/80">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-800/80 text-slate-400 font-semibold uppercase sticky top-0">
-                <tr>
-                  <th class="p-2.5">Motivo / Assunto</th>
-                  <th class="p-2.5 text-right">Qtd</th>
-                  <th class="p-2.5 text-right">Share</th>
-                </tr>
-              </thead>
-              <tbody id="motivesTableBody" class="divide-y divide-slate-800/60"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="border-t border-slate-800/80 pt-4">
-          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Evolução Mensal do Volume (Jan a Out/2026)</h4>
-          <div class="h-44">
-            <canvas id="trendChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const productsData = __PRODUCTS_JSON__;
-    const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro"];
-    let currentProdKey = 'mensalista';
-    let currentFilteredMonth = null;
-    let donutChartInstance = null;
-    let trendChartInstance = null;
-
-    function initTabs() {
-      const tabsContainer = document.getElementById('productTabs');
-      tabsContainer.innerHTML = '';
-      Object.keys(productsData).forEach(key => {
-        const prod = productsData[key];
-        const btn = document.createElement('button');
-        btn.className = `px-3.5 py-2 rounded-lg text-xs font-medium border border-slate-700/60 bg-slate-800/80 text-slate-300 hover:bg-slate-700 transition flex items-center gap-1.5 ${key === currentProdKey ? 'tab-active' : ''}`;
-        btn.innerHTML = `<span>${prod.name}</span> <span class="text-[10px] bg-slate-900/60 px-1.5 py-0.5 rounded font-mono font-bold">${prod.total}</span>`;
-        btn.onclick = () => selectProduct(key);
-        tabsContainer.appendChild(btn);
-      });
-    }
-
-    function selectProduct(key) {
-      currentProdKey = key;
-      currentFilteredMonth = null;
-      initTabs();
-      renderProduct();
-    }
-
-    function renderProduct() {
-      const prod = productsData[currentProdKey];
-      document.getElementById('prodTitle').innerText = prod.name;
-      document.getElementById('prodSLA').innerText = prod.sla;
-      document.getElementById('prodMTTR').innerText = prod.mttr;
-      
-      const resetBtn = document.getElementById('resetFilterBtn');
-      if (currentFilteredMonth !== null) {
-        resetBtn.classList.remove('hidden');
-      } else {
-        resetBtn.classList.add('hidden');
-      }
-
-      const mTable = document.getElementById('monthTableBody');
-      mTable.innerHTML = '';
-      prod.months.forEach((val, idx) => {
-        const pct = prod.total > 0 ? ((val / prod.total) * 100).toFixed(1) : "0.0";
-        const tr = document.createElement('tr');
-        tr.className = `month-row ${currentFilteredMonth === idx ? 'month-active' : ''}`;
-        tr.onclick = () => toggleMonthFilter(idx);
-        tr.innerHTML = `
-          <td class="p-2.5 font-medium ${currentFilteredMonth === idx ? 'text-blue-400 font-bold' : 'text-slate-300'}">
-            ${monthNames[idx] || 'Mês ' + (idx + 1)} ${currentFilteredMonth === idx ? '✓' : ''}
-          </td>
-          <td class="p-2.5 text-right font-mono font-semibold">${val}</td>
-          <td class="p-2.5 text-right text-slate-400 font-mono">${pct}%</td>
-        `;
-        mTable.appendChild(tr);
-      });
-
-      renderMotives();
-      renderTrendChart();
-    }
-
-    function toggleMonthFilter(monthIdx) {
-      if (currentFilteredMonth === monthIdx) {
-        currentFilteredMonth = null;
-      } else {
-        currentFilteredMonth = monthIdx;
-      }
-      renderProduct();
-    }
-
-    function resetMonthFilter() {
-      currentFilteredMonth = null;
-      renderProduct();
-    }
-
-    function renderMotives() {
-      const prod = productsData[currentProdKey];
-      let motivesList = [];
-      let totalMotives = 0;
-
-      if (currentFilteredMonth === null) {
-        document.getElementById('motivesTitle').innerText = `Detalhamento de Motivos (Ano 2026)`;
-        document.getElementById('motivesSubtitle').innerText = `Exibindo distribuição acumulada de todos os meses`;
-        totalMotives = prod.total;
-        motivesList = prod.motives;
-      } else {
-        const mName = monthNames[currentFilteredMonth] || 'Mês Selecionado';
-        const mVal = prod.months[currentFilteredMonth];
-        document.getElementById('motivesTitle').innerText = `Detalhamento de Motivos — ${mName}/2026`;
-        document.getElementById('motivesSubtitle').innerText = `Filtrado exclusivamente para ${mName}`;
-        totalMotives = mVal;
-        
-        motivesList = prod.motives.map(m => {
-          const qty = Math.max(0, Math.round(mVal * (parseFloat(m.pct) / 100)));
-          const pct = mVal > 0 ? ((qty / mVal) * 100).toFixed(1) + '%' : '0.0%';
-          return { name: m.name, qty: qty, pct: pct };
-        });
-      }
-
-      document.getElementById('motivesCount').innerText = `${totalMotives} chamados`;
-
-      const tbody = document.getElementById('motivesTableBody');
-      tbody.innerHTML = '';
-      motivesList.forEach(m => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="p-2.5 text-slate-200 font-medium">${m.name}</td>
-          <td class="p-2.5 text-right font-mono font-semibold text-slate-300">${m.qty}</td>
-          <td class="p-2.5 text-right font-mono text-blue-400 font-bold">${m.pct}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-
-      renderDonutChart(motivesList);
-    }
-
-    function renderDonutChart(motivesList) {
-      const ctx = document.getElementById('motivesChart').getContext('2d');
-      if (donutChartInstance) donutChartInstance.destroy();
-
-      const labels = motivesList.map(m => m.name);
-      const data = motivesList.map(m => m.qty);
-      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#64748b'];
-
-      donutChartInstance = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: data.length > 0 ? data : [1],
-            backgroundColor: colors.slice(0, Math.max(1, labels.length)),
-            borderWidth: 2,
-            borderColor: '#0f172a'
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          cutout: '70%'
-        }
-      });
-    }
-
-    function renderTrendChart() {
-      const ctx = document.getElementById('trendChart').getContext('2d');
-      if (trendChartInstance) trendChartInstance.destroy();
-
-      const prod = productsData[currentProdKey];
-
-      trendChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: monthNames.slice(0, prod.months.length).map(m => m.substring(0, 3)),
-          datasets: [{
-            label: 'Volume de Chamados',
-            data: prod.months,
-            borderColor: '#3b82f6',
-            backgroundColor: 'rgba(59, 130, 246, 0.15)',
-            fill: true,
-            tension: 0.3,
-            pointBackgroundColor: '#60a5fa',
-            pointRadius: 4
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
-            x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } }
-          }
-        }
-      });
-    }
-
-    initTabs();
-    renderProduct();
-  </script>
-</body>
-</html>"""
-
-    html_final = template.replace("__DATA_ATUALIZACAO__", data_atualizacao)\
-                         .replace("__TOTAL_CHAMADOS__", total_chamados_fmt)\
-                         .replace("__PRODUCTS_JSON__", products_json)
-
-    with open("index.html", "w", encoding="utf-8") as f:
-        f.write(html_final)
-
-# ==============================================================================
-# 4. EXECUÇÃO PRINCIPAL
-# ==============================================================================
 if __name__ == "__main__":
-    dados = buscar_dados_jira()
-    gerar_pagina_html(dados)
-    print("Relatório HTML gerado com sucesso!")
+    main()
