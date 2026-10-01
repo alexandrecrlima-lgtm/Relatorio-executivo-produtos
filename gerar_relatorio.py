@@ -7,7 +7,7 @@ import requests
 
 # 1. Obter variáveis de ambiente (GitHub Secrets)
 JIRA_DOMAIN = os.environ.get("JIRA_DOMAIN", "").rstrip("/")
-JIRA_USER_EMAIL = os.environ.get("JIRA_USER_EMAIL", "")
+JIRA_EMAIL = os.environ.get("JIRA_USER_EMAIL", "")
 JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
 
 if not all([JIRA_BASE_URL, JIRA_USER_EMAIL, JIRA_API_TOKEN]):
