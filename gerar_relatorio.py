@@ -6,7 +6,7 @@ from datetime import datetime
 import requests
 
 # 1. Obter variáveis de ambiente (GitHub Secrets)
-JIRA_BASE_URL = os.environ.get("JIRA_BASE_URL", "").rstrip("/")
+JIRA_DOMAIN = os.environ.get("JIRA_DOMAIN", "").rstrip("/")
 JIRA_USER_EMAIL = os.environ.get("JIRA_USER_EMAIL", "")
 JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
 
