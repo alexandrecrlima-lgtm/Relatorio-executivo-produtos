@@ -7,15 +7,15 @@ import requests
 
 # 1. Obter variáveis de ambiente (GitHub Secrets)
 JIRA_DOMAIN = os.environ.get("JIRA_DOMAIN", "").rstrip("/")
-JIRA_EMAIL = os.environ.get("JIRA_USER_EMAIL", "")
+JIRA_EMAIL = os.environ.get("JIRA_EMAIL", "")
 JIRA_API_TOKEN = os.environ.get("JIRA_API_TOKEN", "")
 
-if not all([JIRA_BASE_URL, JIRA_USER_EMAIL, JIRA_API_TOKEN]):
-    print("❌ Erro: Variáveis JIRA_BASE_URL, JIRA_USER_EMAIL ou JIRA_API_TOKEN não configuradas.")
+if not all([JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN]):
+    print("❌ Erro: Variáveis JIRA_DOMAIN, JIRA_EMAIL ou JIRA_API_TOKEN não configuradas.")
     sys.exit(1)
 
 # 2. Configurar Headers de Autenticação Basic Auth
-auth_str = base64.b64encode(f"{JIRA_USER_EMAIL}:{JIRA_API_TOKEN}".encode("utf-8")).decode("utf-8")
+auth_str = base64.b64encode(f"{JIRA_EMAIL}:{JIRA_API_TOKEN}".encode("utf-8")).decode("utf-8")
 headers = {
     "Accept": "application/json",
     "Content-Type": "application/json",
@@ -33,7 +33,7 @@ def fetch_all_jira_issues(jql_query, fields=None):
             "priority", "issuetype"
         ]
 
-    search_url = f"{JIRA_BASE_URL}/rest/api/3/search"
+    search_url = f"{JIRA_DOMAIN}/rest/api/3/search"
     start_at = 0
     max_results = 100
     all_issues = []
