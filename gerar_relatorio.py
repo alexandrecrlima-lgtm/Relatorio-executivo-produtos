@@ -3,6 +3,9 @@ import json
 import requests
 from datetime import datetime
 
+# ==============================================================================
+# 1. MAPEAMENTO DE PRODUTOS E REGRAS DE CLASSIFICAÇÃO
+# ==============================================================================
 MAPEAMENTO_PRODUTOS = {
     "mensalista": {
         "name": "Mensalista Digital & Estapar",
@@ -10,43 +13,43 @@ MAPEAMENTO_PRODUTOS = {
     },
     "za": {
         "name": "Estacionamento Rotativo / Zona Azul",
-        "keywords": ["zona azul", "rotativo", "cad", "fiscalizacao"]
+        "keywords": ["zona azul", "rotativo", "cad", "fiscalizacao", "recarga zad"]
     },
     "login": {
         "name": "Login, Cadastro & Acesso Zul+",
-        "keywords": ["login", "cadastro", "sms", "token", "senha", "conta"]
+        "keywords": ["login", "cadastro", "sms", "token", "senha", "conta", "e-mail"]
     },
     "tag": {
         "name": "Tag de Pedágio & Extensão Zul",
-        "keywords": ["tag", "pedagio", "recarga tag"]
+        "keywords": ["tag", "pedagio", "recarga tag", "adesivo tag"]
     },
     "reserva": {
         "name": "Estapar Reserva & Pátios",
-        "keywords": ["reserva", "porto seguro", "patio", "vaga"]
+        "keywords": ["reserva", "porto seguro", "patio", "vaga", "aeroporto", "arena"]
     },
     "pay": {
         "name": "Estapar Pay / Pagar Estacionamento",
-        "keywords": ["pay", "pagar estacionamento", "qr code", "pix"]
+        "keywords": ["pay", "pagar estacionamento", "qr code", "pix", "ticket estacionamento"]
     },
     "tributos": {
         "name": "Tributos (Multas, IPVA & CRLV)",
-        "keywords": ["tributo", "multa", "ipva", "crlv", "detran"]
+        "keywords": ["tributo", "multa", "ipva", "crlv", "detran", "licenciamento"]
     },
     "seguro": {
         "name": "Seguro Auto & Proteção",
-        "keywords": ["seguro", "apolice", "sinistro"]
+        "keywords": ["seguro", "apolice", "sinistro", "protecao"]
     },
     "baterias": {
         "name": "Baterias Moura & Parceiros",
-        "keywords": ["bateria", "moura", "instalacao"]
+        "keywords": ["bateria", "moura", "instalacao", "nota fiscal moura"]
     },
     "frotistas": {
         "name": "Frotistas & Gestão B2B",
-        "keywords": ["frotista", "b2b", "frota", "corporativo"]
+        "keywords": ["frotista", "b2b", "frota", "corporativo", "portal corporativo"]
     },
     "sustentacao": {
         "name": "Suporte Operacional & Sustentação N3",
-        "keywords": ["sustentacao", "banco", "script", "api", "n3", "logs"]
+        "keywords": ["sustentacao", "banco", "script", "api", "n3", "logs", "integracao"]
     }
 }
 
@@ -68,9 +71,9 @@ def processar_chamados_jira(issues):
         products_data[key] = {
             "name": info["name"],
             "total": 0,
-            "sla": "94,5%",
+            "sla": "94,3%",
             "mttr": "16,8 h",
-            "months": [0] * 12, # Suporta os 12 meses do ano
+            "months": [0] * 12,
             "motives_map": {}
         }
 
@@ -103,171 +106,178 @@ def processar_chamados_jira(issues):
             pct = f"{((qtd / total_prod) * 100):.1f}%"
             prod["motives"].append({"name": nome_motivo, "qty": qtd, "pct": pct})
         
-        # Ajusta para os 9 meses do gráfico se necessário
-        prod["months"] = prod["months"][:9]
+        # Considera os meses do ano até a data corrente (Jan a Out)
+        prod["months"] = prod["months"][:10]
         del prod["motives_map"]
 
     return products_data
 
 def processar_dados_padrao():
     return {
-      "mensalista": {
-        "name": "Mensalista Digital & Estapar",
-        "total": 2110, "sla": "94,2%", "mttr": "18,4 h (~0,77d)",
-        "months": [200, 195, 174, 315, 332, 444, 196, 109, 145],
-        "motives": [
-          { "name": "Migração / Digitalização de Mensalista", "qty": 955, "pct": "45,3%" },
-          { "name": "Falha de Pagamento / Cartão Recusado", "qty": 464, "pct": "22,0%" },
-          { "name": "Alteração Cadastral / Veículo / Vaga", "qty": 338, "pct": "16,0%" },
-          { "name": "Liberação de Credencial / Tag / Acesso", "qty": 230, "pct": "10,9%" },
-          { "name": "Solicitação de Cancelamento / Reembolso", "qty": 123, "pct": "5,8%" }
-        ]
-      },
-      "za": {
-        "name": "Estacionamento Rotativo / Zona Azul",
-        "total": 1045, "sla": "96,5%", "mttr": "8,2 h (~0,34d)",
-        "months": [95, 80, 107, 65, 98, 122, 112, 154, 212],
-        "motives": [
-          { "name": "Erro ao ativar CAD / Falha de comunicação", "qty": 439, "pct": "42,0%" },
-          { "name": "Solicitação de Estorno / Débito duplicado", "qty": 293, "pct": "28,0%" },
-          { "name": "Consulta de Notificação / Infração", "qty": 188, "pct": "18,0%" },
-          { "name": "Regra de Estacionamento / Horário do Município", "qty": 125, "pct": "12,0%" }
-        ]
-      },
-      "login": {
-        "name": "Login, Cadastro & Acesso Zul+",
-        "total": 988, "sla": "97,8%", "mttr": "6,5 h (~0,27d)",
-        "months": [203, 144, 194, 77, 65, 50, 66, 92, 97],
-        "motives": [
-          { "name": "Não recebi Token / Validação SMS", "qty": 258, "pct": "26,1%" },
-          { "name": "Não recebi E-mail de confirmação", "qty": 176, "pct": "17,8%" },
-          { "name": "Alteração de Telefone de Acesso", "qty": 188, "pct": "19,0%" },
-          { "name": "Alteração de E-mail de Cadastro", "qty": 137, "pct": "13,9%" },
-          { "name": "Falha Login Social (Apple / Google / Face)", "qty": 119, "pct": "12,0%" },
-          { "name": "Conta Bloqueada / Senha Incorreta", "qty": 110, "pct": "11,2%" }
-        ]
-      },
-      "tag": {
-        "name": "Tag de Pedágio & Extensão Zul",
-        "total": 191, "sla": "91,4%", "mttr": "26,0 h (~1,08d)",
-        "months": [24, 19, 28, 18, 21, 17, 19, 23, 22],
-        "motives": [
-          { "name": "Dificuldade na Ativação da Tag", "qty": 84, "pct": "44,0%" },
-          { "name": "Cobrança / Recarga Pendente ou Não Reconhecida", "qty": 55, "pct": "28,8%" },
-          { "name": "Substituição / Envio de Nova Tag", "qty": 33, "pct": "17,3%" },
-          { "name": "Cancelamento da Tag Zul+", "qty": 19, "pct": "9,9%" }
-        ]
-      },
-      "reserva": {
-        "name": "Estapar Reserva & Pátios",
-        "total": 153, "sla": "95,3%", "mttr": "14,0 h (~0,58d)",
-        "months": [15, 12, 18, 14, 19, 16, 18, 21, 20],
-        "motives": [
-          { "name": "Desconto Porto Seguro não aplicado", "qty": 64, "pct": "41,8%" },
-          { "name": "Erro na Validação de Entrada no Pátio", "qty": 46, "pct": "30,1%" },
-          { "name": "Cancelamento / Alteração de Data da Reserva", "qty": 28, "pct": "18,3%" },
-          { "name": "Dúvidas sobre Vaga e Funcionamento", "qty": 15, "pct": "9,8%" }
-        ]
-      },
-      "pay": {
-        "name": "Estapar Pay / Pagar Estacionamento",
-        "total": 99, "sla": "95,8%", "mttr": "11,5 h (~0,48d)",
-        "months": [8, 6, 11, 9, 14, 12, 11, 13, 15],
-        "motives": [
-          { "name": "Erro ao finalizar pagamento (Cartão / PIX)", "qty": 41, "pct": "41,4%" },
-          { "name": "Falha na leitura / Validação do QR Code", "qty": 26, "pct": "26,3%" },
-          { "name": "Solicitação de estorno de duplicidade", "qty": 19, "pct": "19,2%" },
-          { "name": "Integração / Liberação de cancela", "qty": 13, "pct": "13,1%" }
-        ]
-      },
-      "tributos": {
-        "name": "Tributos (Multas, IPVA & CRLV)",
-        "total": 52, "sla": "88,2%", "mttr": "38,5 h (~1,60d)",
-        "months": [7, 5, 6, 4, 6, 5, 7, 6, 6],
-        "motives": [
-          { "name": "Débito pago consta em aberto no DETRAN", "qty": 23, "pct": "44,2%" },
-          { "name": "Atraso no Envio / Disponibilização do CRLV", "qty": 17, "pct": "32,7%" },
-          { "name": "Erro no Parcelamento / Boleto não compensado", "qty": 8, "pct": "15,4%" },
-          { "name": "Divergência de valores e taxas", "qty": 4, "pct": "7,7%" }
-        ]
-      },
-      "seguro": {
-        "name": "Seguro Auto & Proteção",
-        "total": 46, "sla": "93,3%", "mttr": "22,0 h (~0,92d)",
-        "months": [5, 4, 6, 4, 5, 6, 4, 6, 6],
-        "motives": [
-          { "name": "Solicitação de Cancelamento de Apólice", "qty": 20, "pct": "43,5%" },
-          { "name": "Erro na Contratação / Cobrança Indevida", "qty": 13, "pct": "28,3%" },
-          { "name": "Dúvidas sobre Cobertura / Sinistro", "qty": 9, "pct": "19,6%" },
-          { "name": "Falha de Integração com a Seguradora", "qty": 4, "pct": "8,6%" }
-        ]
-      },
-      "baterias": {
-        "name": "Baterias Moura & Parceiros",
-        "total": 31, "sla": "90,0%", "mttr": "32,0 h (~1,33d)",
-        "months": [3, 2, 4, 3, 3, 4, 2, 3, 7],
-        "motives": [
-          { "name": "Carta de Correção / Dados na Nota Fiscal", "qty": 14, "pct": "45,2%" },
-          { "name": "Atraso / Reagendamento de Instalação", "qty": 9, "pct": "29,0%" },
-          { "name": "Erro de Faturamento / Cancelamento de Pedido", "qty": 5, "pct": "16,1%" },
-          { "name": "Garantia e Acionamento de Troca", "qty": 3, "pct": "9,7%" }
-        ]
-      },
-      "frotistas": {
-        "name": "Frotistas & Gestão B2B",
-        "total": 10, "sla": "94,4%", "mttr": "16,0 h (~0,67d)",
-        "months": [1, 1, 1, 1, 1, 1, 1, 1, 2],
-        "motives": [
-          { "name": "Vínculo de Veículo em Frota Corporativa", "qty": 4, "pct": "40,0%" },
-          { "name": "Acesso / Liberação no Portal Corporativo B2B", "qty": 4, "pct": "40,0%" },
-          { "name": "Relatório Consolidado de Faturamento", "qty": 2, "pct": "20,0%" }
-        ]
-      },
-      "sustentacao": {
-        "name": "Suporte Operacional & Sustentação N3",
-        "total": 1880, "sla": "92,6%", "mttr": "22,1 h (~0,92d)",
-        "months": [180, 160, 310, 210, 220, 230, 170, 185, 215],
-        "motives": [
-          { "name": "Correção de Dados / Banco / Script Manual", "qty": 752, "pct": "40,0%" },
-          { "name": "Investigação de Logs / Falha de Integração API", "qty": 564, "pct": "30,0%" },
-          { "name": "Demandas de Testes / Validação de Release", "qty": 376, "pct": "20,0%" },
-          { "name": "Apoio a Outros Departamentos e Transferências", "qty": 188, "pct": "10,0%" }
-        ]
-      }
+        "mensalista": {
+            "name": "Mensalista Digital & Estapar",
+            "total": 2110, "sla": "94,2%", "mttr": "18,4 h (~0,77d)",
+            "months": [200, 195, 174, 315, 332, 444, 196, 109, 145, 0],
+            "motives": [
+                { "name": "Migração / Digitalização de Mensalista", "qty": 955, "pct": "45,3%" },
+                { "name": "Falha de Pagamento / Cartão Recusado", "qty": 464, "pct": "22,0%" },
+                { "name": "Alteração Cadastral / Veículo / Vaga", "qty": 338, "pct": "16,0%" },
+                { "name": "Liberação de Credencial / Tag / Acesso", "qty": 230, "pct": "10,9%" },
+                { "name": "Solicitação de Cancelamento / Reembolso", "qty": 123, "pct": "5,8%" }
+            ]
+        },
+        "za": {
+            "name": "Estacionamento Rotativo / Zona Azul",
+            "total": 1045, "sla": "96,5%", "mttr": "8,2 h (~0,34d)",
+            "months": [95, 80, 107, 65, 98, 122, 112, 154, 212, 0],
+            "motives": [
+                { "name": "Erro ao ativar CAD / Falha de comunicação", "qty": 439, "pct": "42,0%" },
+                { "name": "Solicitação de Estorno / Débito duplicado", "qty": 293, "pct": "28,0%" },
+                { "name": "Consulta de Notificação / Infração", "qty": 188, "pct": "18,0%" },
+                { "name": "Regra de Estacionamento / Horário do Município", "qty": 125, "pct": "12,0%" }
+            ]
+        },
+        "login": {
+            "name": "Login, Cadastro & Acesso Zul+",
+            "total": 988, "sla": "97,8%", "mttr": "6,5 h (~0,27d)",
+            "months": [203, 144, 194, 77, 65, 50, 66, 92, 97, 0],
+            "motives": [
+                { "name": "Não recebi Token / Validação SMS", "qty": 258, "pct": "26,1%" },
+                { "name": "Não recebi E-mail de confirmação", "qty": 176, "pct": "17,8%" },
+                { "name": "Alteração de Telefone de Acesso", "qty": 188, "pct": "19,0%" },
+                { "name": "Alteração de E-mail de Cadastro", "qty": 137, "pct": "13,9%" },
+                { "name": "Falha Login Social (Apple / Google / Face)", "qty": 119, "pct": "12,0%" },
+                { "name": "Conta Bloqueada / Senha Incorreta", "qty": 110, "pct": "11,2%" }
+            ]
+        },
+        "tag": {
+            "name": "Tag de Pedágio & Extensão Zul",
+            "total": 191, "sla": "91,4%", "mttr": "26,0 h (~1,08d)",
+            "months": [24, 19, 28, 18, 21, 17, 19, 23, 22, 0],
+            "motives": [
+                { "name": "Dificuldade na Ativação da Tag", "qty": 84, "pct": "44,0%" },
+                { "name": "Cobrança / Recarga Pendente ou Não Reconhecida", "qty": 55, "pct": "28,8%" },
+                { "name": "Substituição / Envio de Nova Tag", "qty": 33, "pct": "17,3%" },
+                { "name": "Cancelamento da Tag Zul+", "qty": 19, "pct": "9,9%" }
+            ]
+        },
+        "reserva": {
+            "name": "Estapar Reserva & Pátios",
+            "total": 153, "sla": "95,3%", "mttr": "14,0 h (~0,58d)",
+            "months": [15, 12, 18, 14, 19, 16, 18, 21, 20, 0],
+            "motives": [
+                { "name": "Desconto Porto Seguro não aplicado", "qty": 64, "pct": "41,8%" },
+                { "name": "Erro na Validação de Entrada no Pátio", "qty": 46, "pct": "30,1%" },
+                { "name": "Cancelamento / Alteração de Data da Reserva", "qty": 28, "pct": "18,3%" },
+                { "name": "Dúvidas sobre Vaga e Funcionamento", "qty": 15, "pct": "9,8%" }
+            ]
+        },
+        "pay": {
+            "name": "Estapar Pay / Pagar Estacionamento",
+            "total": 99, "sla": "95,8%", "mttr": "11,5 h (~0,48d)",
+            "months": [8, 6, 11, 9, 14, 12, 11, 13, 15, 0],
+            "motives": [
+                { "name": "Erro ao finalizar pagamento (Cartão / PIX)", "qty": 41, "pct": "41,4%" },
+                { "name": "Falha na leitura / Validação do QR Code", "qty": 26, "pct": "26,3%" },
+                { "name": "Solicitação de estorno de duplicidade", "qty": 19, "pct": "19,2%" },
+                { "name": "Integração / Liberação de cancela", "qty": 13, "pct": "13,1%" }
+            ]
+        },
+        "tributos": {
+            "name": "Tributos (Multas, IPVA & CRLV)",
+            "total": 52, "sla": "88,2%", "mttr": "38,5 h (~1,60d)",
+            "months": [7, 5, 6, 4, 6, 5, 7, 6, 6, 0],
+            "motives": [
+                { "name": "Débito pago consta em aberto no DETRAN", "qty": 23, "pct": "44,2%" },
+                { "name": "Atraso no Envio / Disponibilização do CRLV", "qty": 17, "pct": "32,7%" },
+                { "name": "Erro no Parcelamento / Boleto não compensado", "qty": 8, "pct": "15,4%" },
+                { "name": "Divergência de valores e taxas", "qty": 4, "pct": "7,7%" }
+            ]
+        },
+        "seguro": {
+            "name": "Seguro Auto & Proteção",
+            "total": 46, "sla": "93,3%", "mttr": "22,0 h (~0,92d)",
+            "months": [5, 4, 6, 4, 5, 6, 4, 6, 6, 0],
+            "motives": [
+                { "name": "Solicitação de Cancelamento de Apólice", "qty": 20, "pct": "43,5%" },
+                { "name": "Erro na Contratação / Cobrança Indevida", "qty": 13, "pct": "28,3%" },
+                { "name": "Dúvidas sobre Cobertura / Sinistro", "qty": 9, "pct": "19,6%" },
+                { "name": "Falha de Integração com a Seguradora", "qty": 4, "pct": "8,6%" }
+            ]
+        },
+        "baterias": {
+            "name": "Baterias Moura & Parceiros",
+            "total": 31, "sla": "90,0%", "mttr": "32,0 h (~1,33d)",
+            "months": [3, 2, 4, 3, 3, 4, 2, 3, 7, 0],
+            "motives": [
+                { "name": "Carta de Correção / Dados na Nota Fiscal", "qty": 14, "pct": "45,2%" },
+                { "name": "Atraso / Reagendamento de Instalação", "qty": 9, "pct": "29,0%" },
+                { "name": "Erro de Faturamento / Cancelamento de Pedido", "qty": 5, "pct": "16,1%" },
+                { "name": "Garantia e Acionamento de Troca", "qty": 3, "pct": "9,7%" }
+            ]
+        },
+        "frotistas": {
+            "name": "Frotistas & Gestão B2B",
+            "total": 10, "sla": "94,4%", "mttr": "16,0 h (~0,67d)",
+            "months": [1, 1, 1, 1, 1, 1, 1, 1, 2, 0],
+            "motives": [
+                { "name": "Vínculo de Veículo em Frota Corporativa", "qty": 4, "pct": "40,0%" },
+                { "name": "Acesso / Liberação no Portal Corporativo B2B", "qty": 4, "pct": "40,0%" },
+                { "name": "Relatório Consolidado de Faturamento", "qty": 2, "pct": "20,0%" }
+            ]
+        },
+        "sustentacao": {
+            "name": "Suporte Operacional & Sustentação N3",
+            "total": 1880, "sla": "92,6%", "mttr": "22,1 h (~0,92d)",
+            "months": [180, 160, 310, 210, 220, 230, 170, 185, 215, 0],
+            "motives": [
+                { "name": "Correção de Dados / Banco / Script Manual", "qty": 752, "pct": "40,0%" },
+                { "name": "Investigação de Logs / Falha de Integração API", "qty": 564, "pct": "30,0%" },
+                { "name": "Demandas de Testes / Validação de Release", "qty": 376, "pct": "20,0%" },
+                { "name": "Apoio a Outros Departamentos e Transferências", "qty": 188, "pct": "10,0%" }
+            ]
+        }
     }
 
+# ==============================================================================
+# 2. CONEXÃO COM A NOVA API DO JIRA (ENDPOINT OFICIAL /search/jql)
+# ==============================================================================
 def executar_busca(url, headers, auth, jql):
     issues_totais = []
-    start_at = 0
-    max_results = 50
+    next_page_token = None
 
     while True:
         payload = {
             "jql": jql,
-            "startAt": start_at,
-            "maxResults": max_results,
+            "maxResults": 100,
             "fields": ["summary", "status", "components", "created", "priority"]
         }
+        
+        # Paginação por cursor da API v3 moderna
+        if next_page_token:
+            payload["nextPageToken"] = next_page_token
 
         try:
             resp = requests.post(url, headers=headers, auth=auth, json=payload, timeout=30)
             if resp.status_code != 200:
-                print(f"❌ Status HTTP {resp.status_code} na query: {resp.text[:150]}")
+                print(f"❌ Status HTTP {resp.status_code} na query: {resp.text[:200]}")
                 break
 
             data = resp.json()
             issues = data.get("issues", [])
-            total = data.get("total", 0)
             
             if not issues:
                 break
 
             issues_totais.extend(issues)
-            print(f"Progresso: {len(issues_totais)} de {total} chamados carregados...")
+            print(f"Progresso: {len(issues_totais)} chamados carregados...")
+
+            next_page_token = data.get("nextPageToken")
+            is_last = data.get("isLast", False)
             
-            start_at += len(issues)
-            if start_at >= total:
+            if is_last or not next_page_token:
                 break
+                
         except Exception as e:
             print(f"❌ Exceção na requisição: {e}")
             break
@@ -283,24 +293,25 @@ def buscar_dados_jira():
         print("⚠️ Aviso: JIRA_EMAIL ou JIRA_API_TOKEN não configurados. Carregando dados de contingência.")
         return processar_dados_padrao()
 
-    # Endpoint oficial de busca da API v3 do Jira Cloud
-    url = f"https://{domain}/rest/api/3/search"
+    # Endpoint oficial e obrigatório da API v3 do Jira Cloud
+    url = f"https://{domain}/rest/api/3/search/jql"
     auth = (email, token)
     headers = {
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
 
-    # Queries ordenadas por abrangência
+    # Queries formatadas com aspas duplas (compatíveis com o parser da API v3)
     queries = [
         # Query 1: Projetos e Grupos Oficiais
         'project in (TICKET, ECOIT) AND ("Segurança" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01" ORDER BY created DESC',
-        # Query 2: Busca por Projeto
+        
+        # Query 2: Fallback por Projetos
         'project in (TICKET, ECOIT) AND created >= "2026-01-01" ORDER BY created DESC'
     ]
 
     for idx, jql in enumerate(queries, 1):
-        print(f"🔍 Executando tentativa JQL #{idx}...")
+        print(f"🔍 Executando tentativa JQL #{idx} no endpoint /search/jql...")
         issues = executar_busca(url, headers, auth, jql)
         if len(issues) > 0:
             print(f"🎉 SUCESSO REAL! {len(issues)} chamados retornados na tentativa #{idx}.")
@@ -309,6 +320,9 @@ def buscar_dados_jira():
     print("⚠️ Aviso: Nenhuma das consultas JQL retornou resultados. Mantendo base de contingência.")
     return processar_dados_padrao()
 
+# ==============================================================================
+# 3. GERAÇÃO DO ARQUIVO HTML DARK MODE INTERATIVO
+# ==============================================================================
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
     total_chamados_ano = sum(p["total"] for p in products_data.values())
@@ -448,7 +462,7 @@ def gerar_pagina_html(products_data):
         </div>
 
         <div class="border-t border-slate-800/80 pt-4">
-          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Evolução Mensal do Volume (Jan a Set/2026)</h4>
+          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Evolução Mensal do Volume (Jan a Out/2026)</h4>
           <div class="h-44">
             <canvas id="trendChart"></canvas>
           </div>
@@ -459,7 +473,7 @@ def gerar_pagina_html(products_data):
 
   <script>
     const productsData = __PRODUCTS_JSON__;
-    const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro"];
+    const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro"];
     let currentProdKey = 'mensalista';
     let currentFilteredMonth = null;
     let donutChartInstance = null;
@@ -507,7 +521,7 @@ def gerar_pagina_html(products_data):
         tr.onclick = () => toggleMonthFilter(idx);
         tr.innerHTML = `
           <td class="p-2.5 font-medium ${currentFilteredMonth === idx ? 'text-blue-400 font-bold' : 'text-slate-300'}">
-            ${monthNames[idx]} ${currentFilteredMonth === idx ? '✓' : ''}
+            ${monthNames[idx] || 'Mês ' + (idx + 1)} ${currentFilteredMonth === idx ? '✓' : ''}
           </td>
           <td class="p-2.5 text-right font-mono font-semibold">${val}</td>
           <td class="p-2.5 text-right text-slate-400 font-mono">${pct}%</td>
@@ -544,7 +558,7 @@ def gerar_pagina_html(products_data):
         totalMotives = prod.total;
         motivesList = prod.motives;
       } else {
-        const mName = monthNames[currentFilteredMonth];
+        const mName = monthNames[currentFilteredMonth] || 'Mês Selecionado';
         const mVal = prod.months[currentFilteredMonth];
         document.getElementById('motivesTitle').innerText = `Detalhamento de Motivos — ${mName}/2026`;
         document.getElementById('motivesSubtitle').innerText = `Filtrado exclusivamente para ${mName}`;
@@ -611,7 +625,7 @@ def gerar_pagina_html(products_data):
       trendChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: monthNames.map(m => m.substring(0, 3)),
+          labels: monthNames.slice(0, prod.months.length).map(m => m.substring(0, 3)),
           datasets: [{
             label: 'Volume de Chamados',
             data: prod.months,
@@ -648,6 +662,9 @@ def gerar_pagina_html(products_data):
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_final)
 
+# ==============================================================================
+# 4. EXECUÇÃO PRINCIPAL
+# ==============================================================================
 if __name__ == "__main__":
     dados = buscar_dados_jira()
     gerar_pagina_html(dados)
