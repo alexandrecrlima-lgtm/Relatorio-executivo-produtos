@@ -301,16 +301,16 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQLs com escopo expandido para capturar toda a base de 6.672+ chamados
+    # JQLs direcionadas rigorosamente aos 3 Grupos Solucionadores Oficiais
     queries = [
-        # 1. Busca ampla por projetos (sem filtrar cf[22532] que pode estar nulo em chamados antigos)
-        "project in (TICKET, ECOIT, SAC) AND created >= '2026-01-01' ORDER BY created DESC",
-        
-        # 2. Busca por Custom Field OU Projetos combinados
-        "cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') OR project in (TICKET, ECOIT, SAC) ORDER BY created DESC",
-        
-        # 3. Busca geral dos projetos
-        "project in (TICKET, ECOIT, SAC) ORDER BY created DESC"
+        # 1. Filtro exato pelos 3 grupos solucionadores em customfield, componente ou resumo
+        'project in (TICKET, ECOIT, SAC) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce", "Intercom") OR "Request Type" in ("Intercom Incidentes", "Suporte Sistemas")) AND created >= "2026-01-01" ORDER BY created DESC',
+
+        # 2. Filtro direto por Custom Field 22532 (Grupo Solucionador) do ano corrente
+        'cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC',
+
+        # 3. Filtro por Componente/Grupo
+        'component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC'
     ]
 
     for idx, jql in enumerate(queries, 1):
@@ -322,7 +322,6 @@ def buscar_dados_jira():
 
     print("Aviso: Nenhuma das consultas JQL retornou resultados. Mantendo base de contingência.")
     return processar_dados_padrao()
-
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
     
