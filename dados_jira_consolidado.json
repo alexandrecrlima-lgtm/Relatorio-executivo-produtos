@@ -1705,9 +1705,9 @@
   {
     "key": "TICKET-273825",
     "resumo": "Estacionamento rotativo/Zona Azul - 27537302880",
-    "status": "Resolvido",
+    "status": "Fechado",
     "data_criacao": "2026-09-25T14:08:41.312-0300",
-    "data_atualizacao": "2026-09-25T14:57:57.309-0300",
+    "data_atualizacao": "2026-10-02T17:57:20.445-0300",
     "labels": [
       "Ecommerce-Sistemas"
     ],
