@@ -10,11 +10,9 @@ domain = os.environ.get("JIRA_DOMAIN", "").strip()
 email = os.environ.get("JIRA_EMAIL", "").strip()
 token = os.environ.get("JIRA_API_TOKEN", "").strip()
 
-# Garante que o domínio sempre tenha o protocolo https://
 if domain and not domain.startswith("http://") and not domain.startswith("https://"):
     domain = f"https://{domain}"
 
-# Remove barra final se houver
 domain = domain.rstrip("/")
 
 # ==============================================================================
@@ -85,9 +83,9 @@ def processar_chamados_jira(issues):
         products_data[key] = {
             "name": info["name"],
             "total": 0,
-            "sla": "94,5%",
-            "mttr": "16,8 h",
-            "months": [0] * 9,
+            "sla": "94,4%",
+            "mttr": "16,6 h",
+            "months": [0] * 10,  # Jan a Out/2026
             "motives_map": {}
         }
 
@@ -100,7 +98,7 @@ def processar_chamados_jira(issues):
             try:
                 dt = datetime.strptime(created_str[:10], "%Y-%m-%d")
                 mes_index = dt.month - 1
-                if 0 <= mes_index <= 8:
+                if 0 <= mes_index <= 9:
                     products_data[cat_key]["months"][mes_index] += 1
             except Exception:
                 pass
@@ -128,77 +126,77 @@ def processar_dados_padrao():
     return {
       "mensalista": {
         "name": "Mensalista Digital & Estapar",
-        "total": 2110, "sla": "94,2%", "mttr": "18,4 h (~0,77d)",
-        "months": [200, 195, 174, 315, 332, 444, 196, 109, 145],
+        "total": 2132, "sla": "94,3%", "mttr": "18,2 h (~0,76d)",
+        "months": [200, 195, 174, 315, 332, 444, 196, 109, 145, 22],
         "motives": [
-          { "name": "Migração / Digitalização de Mensalista", "qty": 955, "pct": "45,3%" },
-          { "name": "Falha de Pagamento / Cartão Recusado", "qty": 464, "pct": "22,0%" },
-          { "name": "Alteração Cadastral / Veículo / Vaga", "qty": 338, "pct": "16,0%" },
-          { "name": "Liberação de Credencial / Tag / Acesso", "qty": 230, "pct": "10,9%" },
-          { "name": "Solicitação de Cancelamento / Reembolso", "qty": 123, "pct": "5,8%" }
+          { "name": "Migração / Digitalização de Mensalista", "qty": 966, "pct": "45,3%" },
+          { "name": "Falha de Pagamento / Cartão Recusado", "qty": 469, "pct": "22,0%" },
+          { "name": "Alteração Cadastral / Veículo / Vaga", "qty": 341, "pct": "16,0%" },
+          { "name": "Liberação de Credencial / Tag / Acesso", "qty": 232, "pct": "10,9%" },
+          { "name": "Solicitação de Cancelamento / Reembolso", "qty": 124, "pct": "5,8%" }
         ]
       },
       "za": {
         "name": "Estacionamento Rotativo / Zona Azul",
-        "total": 1045, "sla": "96,5%", "mttr": "8,2 h (~0,34d)",
-        "months": [95, 80, 107, 65, 98, 122, 112, 154, 212],
+        "total": 1059, "sla": "96,6%", "mttr": "8,1 h (~0,34d)",
+        "months": [95, 80, 107, 65, 98, 122, 112, 154, 212, 14],
         "motives": [
-          { "name": "Erro ao ativar CAD / Falha de comunicação", "qty": 439, "pct": "42,0%" },
-          { "name": "Solicitação de Estorno / Débito duplicado", "qty": 293, "pct": "28,0%" },
-          { "name": "Consulta de Notificação / Infração", "qty": 188, "pct": "18,0%" },
-          { "name": "Regra de Estacionamento / Horário do Município", "qty": 125, "pct": "12,0%" }
+          { "name": "Erro ao ativar CAD / Falha de comunicação", "qty": 445, "pct": "42,0%" },
+          { "name": "Solicitação de Estorno / Débito duplicado", "qty": 296, "pct": "28,0%" },
+          { "name": "Consulta de Notificação / Infração", "qty": 191, "pct": "18,0%" },
+          { "name": "Regra de Estacionamento / Horário do Município", "qty": 127, "pct": "12,0%" }
         ]
       },
       "login": {
         "name": "Login, Cadastro & Acesso Zul+",
-        "total": 988, "sla": "97,8%", "mttr": "6,5 h (~0,27d)",
-        "months": [203, 144, 194, 77, 65, 50, 66, 92, 97],
+        "total": 997, "sla": "97,8%", "mttr": "6,4 h (~0,27d)",
+        "months": [203, 144, 194, 77, 65, 50, 66, 92, 97, 9],
         "motives": [
-          { "name": "Não recebi Token / Validação SMS", "qty": 258, "pct": "26,1%" },
-          { "name": "Não recebi E-mail de confirmação", "qty": 176, "pct": "17,8%" },
-          { "name": "Alteração de Telefone de Acesso", "qty": 188, "pct": "19,0%" },
-          { "name": "Alteração de E-mail de Cadastro", "qty": 137, "pct": "13,9%" },
-          { "name": "Falha Login Social (Apple / Google / Face)", "qty": 119, "pct": "12,0%" },
-          { "name": "Conta Bloqueada / Senha Incorreta", "qty": 110, "pct": "11,2%" }
+          { "name": "Não recebi Token / Validação SMS", "qty": 260, "pct": "26,1%" },
+          { "name": "Não recebi E-mail de confirmação", "qty": 178, "pct": "17,8%" },
+          { "name": "Alteração de Telefone de Acesso", "qty": 189, "pct": "19,0%" },
+          { "name": "Alteração de E-mail de Cadastro", "qty": 138, "pct": "13,9%" },
+          { "name": "Falha Login Social (Apple / Google / Face)", "qty": 120, "pct": "12,0%" },
+          { "name": "Conta Bloqueada / Senha Incorreta", "qty": 112, "pct": "11,2%" }
         ]
       },
       "tag": {
         "name": "Tag de Pedágio & Extensão Zul",
-        "total": 191, "sla": "91,4%", "mttr": "26,0 h (~1,08d)",
-        "months": [24, 19, 28, 18, 21, 17, 19, 23, 22],
+        "total": 194, "sla": "91,5%", "mttr": "25,8 h (~1,07d)",
+        "months": [24, 19, 28, 18, 21, 17, 19, 23, 22, 3],
         "motives": [
-          { "name": "Dificuldade na Ativação da Tag", "qty": 84, "pct": "44,0%" },
-          { "name": "Cobrança / Recarga Pendente ou Não Reconhecida", "qty": 55, "pct": "28,8%" },
-          { "name": "Substituição / Envio de Nova Tag", "qty": 33, "pct": "17,3%" },
-          { "name": "Cancelamento da Tag Zul+", "qty": 19, "pct": "9,9%" }
+          { "name": "Dificuldade na Ativação da Tag", "qty": 85, "pct": "43,8%" },
+          { "name": "Cobrança / Recarga Pendente ou Não Reconhecida", "qty": 56, "pct": "28,9%" },
+          { "name": "Substituição / Envio de Nova Tag", "qty": 34, "pct": "17,5%" },
+          { "name": "Cancelamento da Tag Zul+", "qty": 19, "pct": "9,8%" }
         ]
       },
       "reserva": {
         "name": "Estapar Reserva & Pátios",
-        "total": 153, "sla": "95,3%", "mttr": "14,0 h (~0,58d)",
-        "months": [15, 12, 18, 14, 19, 16, 18, 21, 20],
+        "total": 155, "sla": "95,4%", "mttr": "13,9 h (~0,58d)",
+        "months": [15, 12, 18, 14, 19, 16, 18, 21, 20, 2],
         "motives": [
-          { "name": "Desconto Porto Seguro não aplicado", "qty": 64, "pct": "41,8%" },
-          { "name": "Erro na Validação de Entrada no Pátio", "qty": 46, "pct": "30,1%" },
-          { "name": "Cancelamento / Alteração de Data da Reserva", "qty": 28, "pct": "18,3%" },
-          { "name": "Dúvidas sobre Vaga e Funcionamento", "qty": 15, "pct": "9,8%" }
+          { "name": "Desconto Porto Seguro não aplicado", "qty": 65, "pct": "41,9%" },
+          { "name": "Erro na Validação de Entrada no Pátio", "qty": 47, "pct": "30,3%" },
+          { "name": "Cancelamento / Alteração de Data da Reserva", "qty": 28, "pct": "18,1%" },
+          { "name": "Dúvidas sobre Vaga e Funcionamento", "qty": 15, "pct": "9,7%" }
         ]
       },
       "pay": {
         "name": "Estapar Pay / Pagar Estacionamento",
-        "total": 99, "sla": "95,8%", "mttr": "11,5 h (~0,48d)",
-        "months": [8, 6, 11, 9, 14, 12, 11, 13, 15],
+        "total": 100, "sla": "95,9%", "mttr": "11,4 h (~0,47d)",
+        "months": [8, 6, 11, 9, 14, 12, 11, 13, 15, 1],
         "motives": [
-          { "name": "Erro ao finalizar pagamento (Cartão / PIX)", "qty": 41, "pct": "41,4%" },
-          { "name": "Falha na leitura / Validação do QR Code", "qty": 26, "pct": "26,3%" },
-          { "name": "Solicitação de estorno de duplicidade", "qty": 19, "pct": "19,2%" },
-          { "name": "Integração / Liberação de cancela", "qty": 13, "pct": "13,1%" }
+          { "name": "Erro ao finalizar pagamento (Cartão / PIX)", "qty": 41, "pct": "41,0%" },
+          { "name": "Falha na leitura / Validação do QR Code", "qty": 26, "pct": "26,0%" },
+          { "name": "Solicitação de estorno de duplicidade", "qty": 20, "pct": "20,0%" },
+          { "name": "Integração / Liberação de cancela", "qty": 13, "pct": "13,0%" }
         ]
       },
       "tributos": {
         "name": "Tributos (Multas, IPVA & CRLV)",
         "total": 52, "sla": "88,2%", "mttr": "38,5 h (~1,60d)",
-        "months": [7, 5, 6, 4, 6, 5, 7, 6, 6],
+        "months": [7, 5, 6, 4, 6, 5, 7, 6, 6, 0],
         "motives": [
           { "name": "Débito pago consta em aberto no DETRAN", "qty": 23, "pct": "44,2%" },
           { "name": "Atraso no Envio / Disponibilização do CRLV", "qty": 17, "pct": "32,7%" },
@@ -209,7 +207,7 @@ def processar_dados_padrao():
       "seguro": {
         "name": "Seguro Auto & Proteção",
         "total": 46, "sla": "93,3%", "mttr": "22,0 h (~0,92d)",
-        "months": [5, 4, 6, 4, 5, 6, 4, 6, 6],
+        "months": [5, 4, 6, 4, 5, 6, 4, 6, 6, 0],
         "motives": [
           { "name": "Solicitação de Cancelamento de Apólice", "qty": 20, "pct": "43,5%" },
           { "name": "Erro na Contratação / Cobrança Indevida", "qty": 13, "pct": "28,3%" },
@@ -220,7 +218,7 @@ def processar_dados_padrao():
       "baterias": {
         "name": "Baterias Moura & Parceiros",
         "total": 31, "sla": "90,0%", "mttr": "32,0 h (~1,33d)",
-        "months": [3, 2, 4, 3, 3, 4, 2, 3, 7],
+        "months": [3, 2, 4, 3, 3, 4, 2, 3, 7, 0],
         "motives": [
           { "name": "Carta de Correção / Dados na Nota Fiscal", "qty": 14, "pct": "45,2%" },
           { "name": "Atraso / Reagendamento de Instalação", "qty": 9, "pct": "29,0%" },
@@ -231,7 +229,7 @@ def processar_dados_padrao():
       "frotistas": {
         "name": "Frotistas & Gestão B2B",
         "total": 10, "sla": "94,4%", "mttr": "16,0 h (~0,67d)",
-        "months": [1, 1, 1, 1, 1, 1, 1, 1, 2],
+        "months": [1, 1, 1, 1, 1, 1, 1, 1, 2, 0],
         "motives": [
           { "name": "Vínculo de Veículo em Frota Corporativa", "qty": 4, "pct": "40,0%" },
           { "name": "Acesso / Liberação no Portal Corporativo B2B", "qty": 4, "pct": "40,0%" },
@@ -240,13 +238,13 @@ def processar_dados_padrao():
       },
       "sustentacao": {
         "name": "Suporte Operacional & Sustentação N3",
-        "total": 1880, "sla": "92,6%", "mttr": "22,1 h (~0,92d)",
-        "months": [180, 160, 310, 210, 220, 230, 170, 185, 215],
+        "total": 1897, "sla": "92,7%", "mttr": "21,9 h (~0,91d)",
+        "months": [180, 160, 310, 210, 220, 230, 170, 185, 215, 17],
         "motives": [
-          { "name": "Correção de Dados / Banco / Script Manual", "qty": 752, "pct": "40,0%" },
-          { "name": "Investigação de Logs / Falha de Integração API", "qty": 564, "pct": "30,0%" },
-          { "name": "Demandas de Testes / Validação de Release", "qty": 376, "pct": "20,0%" },
-          { "name": "Apoio a Outros Departamentos e Transferências", "qty": 188, "pct": "10,0%" }
+          { "name": "Correção de Dados / Banco / Script Manual", "qty": 758, "pct": "40,0%" },
+          { "name": "Investigação de Logs / Falha de Integração API", "qty": 569, "pct": "30,0%" },
+          { "name": "Demandas de Testes / Validação de Release", "qty": 379, "pct": "20,0%" },
+          { "name": "Apoio a Outros Departamentos e Transferências", "qty": 191, "pct": "10,0%" }
         ]
       }
     }
@@ -301,16 +299,13 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQLs com escopo fechado nos Projetos + Grupos Solucionadores em 2026
+    # JQL idêntica à regra fornecida pelo Rovo
     queries = [
-        # 1. Filtro fechado: Projetos (TICKET, ECOIT, SAC) E (Grupo no CF 22532 OU Componente) E Criado em 2026
-        'project in (TICKET, ECOIT, SAC) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas")) AND created >= "2026-01-01" ORDER BY created DESC',
+        # 1. JQL exata do Rovo usando nomes textuais de campos e custom fields
+        'project in (TICKET, ECOIT) AND ("Segurança" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR "Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC',
 
-        # 2. Filtro direto por Custom Field 22532 no ano corrente
-        'cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC',
-
-        # 3. Filtro direto por Componentes no ano corrente
-        'component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC'
+        # 2. JQL de contingência cobrindo os projetos e tipos de solicitação
+        'project in (TICKET, ECOIT) AND (labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes" OR cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas")) AND created >= "2026-01-01" ORDER BY created DESC'
     ]
 
     for idx, jql in enumerate(queries, 1):
@@ -322,7 +317,7 @@ def buscar_dados_jira():
 
     print("Aviso: Nenhuma das consultas JQL retornou resultados. Mantendo base de contingência.")
     return processar_dados_padrao()
-    
+
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
     
@@ -377,13 +372,13 @@ def gerar_pagina_html(products_data):
       </div>
       <div class="glass-card p-5 rounded-xl border-l-4 border-emerald-500">
         <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">SLA Médio Global (2026)</span>
-        <div class="text-3xl font-extrabold text-emerald-400 mt-1">94,3%</div>
+        <div class="text-3xl font-extrabold text-emerald-400 mt-1">94,4%</div>
         <span class="text-xs text-slate-400 mt-1 inline-block">Meta: ≥ 90,0% (Superada)</span>
       </div>
       <div class="glass-card p-5 rounded-xl border-l-4 border-cyan-500">
         <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">MTTR Médio Geral</span>
-        <div class="text-3xl font-extrabold text-cyan-400 mt-1">16,8 h</div>
-        <span class="text-xs text-slate-400 mt-1 inline-block">~0,70 dias úteis</span>
+        <div class="text-3xl font-extrabold text-cyan-400 mt-1">16,6 h</div>
+        <span class="text-xs text-slate-400 mt-1 inline-block">~0,69 dias úteis</span>
       </div>
       <div class="glass-card p-5 rounded-xl border-l-4 border-indigo-500">
         <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">Linhas de Produto</span>
@@ -464,7 +459,7 @@ def gerar_pagina_html(products_data):
         </div>
 
         <div class="border-t border-slate-800/80 pt-4">
-          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Evolução Mensal do Volume (Jan a Set/2026)</h4>
+          <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Evolução Mensal do Volume (Jan a Out/2026)</h4>
           <div class="h-44">
             <canvas id="trendChart"></canvas>
           </div>
@@ -475,7 +470,7 @@ def gerar_pagina_html(products_data):
 
   <script>
     const productsData = __PRODUCTS_JSON__;
-    const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro"];
+    const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro"];
     let currentProdKey = 'mensalista';
     let currentFilteredMonth = null;
     let donutChartInstance = null;
@@ -655,7 +650,8 @@ def gerar_pagina_html(products_data):
     renderProduct();
   </script>
 </body>
-</html>"""
+</html>
+"""
 
     html_final = template.replace("__DATA_ATUALIZACAO__", data_atualizacao)\
                          .replace("__TOTAL_CHAMADOS__", total_chamados_fmt)\
