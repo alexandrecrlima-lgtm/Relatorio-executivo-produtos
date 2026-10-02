@@ -301,13 +301,16 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQLs calibradas para atingir a volumetria oficial (6.670+ chamados)
+    # JQLs com escopo fechado nos Projetos + Grupos Solucionadores em 2026
     queries = [
-        # 1. Busca ampla por todos os projetos e filas de E-commerce / Sustentação em 2026
-        'created >= "2026-01-01" AND (project in (TICKET, ECOIT, SAC) OR cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce", "Intercom", "Suporte-Sistemas") OR "Request Type" in ("Intercom Incidentes", "Suporte Sistemas", "Incidentes Ecommerce")) ORDER BY created DESC',
+        # 1. Filtro fechado: Projetos (TICKET, ECOIT, SAC) E (Grupo no CF 22532 OU Componente) E Criado em 2026
+        'project in (TICKET, ECOIT, SAC) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas")) AND created >= "2026-01-01" ORDER BY created DESC',
 
-        # 2. Busca por projetos do Service Desk em 2026
-        'project in (TICKET, ECOIT, SAC) AND created >= "2026-01-01" ORDER BY created DESC'
+        # 2. Filtro direto por Custom Field 22532 no ano corrente
+        'cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC',
+
+        # 3. Filtro direto por Componentes no ano corrente
+        'component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC'
     ]
 
     for idx, jql in enumerate(queries, 1):
