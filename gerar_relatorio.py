@@ -301,16 +301,16 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQLs com histórico de atribuição (WAS IN) e atualização em 2026
+    # JQLs com parênteses estritos isolando os Grupos Solucionadores
     queries = [
-        # 1. Captura chamados criados OU atualizados/resolvidos em 2026 que pertençam ou TENHAM PASSADO (WAS IN) pelos teus grupos
-        'project in (TICKET, ECOIT, SAC) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[22532] WAS IN ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce", "Intercom", "Suporte-Sistemas")) AND (created >= "2026-01-01" OR updated >= "2026-01-01") ORDER BY created DESC',
+        # 1. Filtro estrito: (Grupos Solucionadores em Custom Field OU Histórico OU Componente) E Criado em 2026
+        'project in (TICKET, ECOIT, SAC) AND (cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[22532] WAS IN ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR component in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas")) AND created >= "2026-01-01" ORDER BY created DESC',
 
-        # 2. Busca abrangente por histórico nos grupos sem trava de data de criação pura
-        'cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[22532] WAS IN ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") ORDER BY created DESC',
+        # 2. Filtro histórico isolado no Custom Field 22532 criado em 2026
+        '(cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[22532] WAS IN ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas")) AND created >= "2026-01-01" ORDER BY created DESC',
 
-        # 3. Busca ampla de projetos em 2026
-        'project in (TICKET, ECOIT, SAC) AND (created >= "2026-01-01" OR updated >= "2026-01-01") ORDER BY created DESC'
+        # 3. Filtro direto de Grupos no Custom Field (Caso o WAS IN restrinja demais)
+        'cf[22532] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01" ORDER BY created DESC'
     ]
 
     for idx, jql in enumerate(queries, 1):
@@ -322,6 +322,7 @@ def buscar_dados_jira():
 
     print("Aviso: Nenhuma das consultas JQL retornou resultados. Mantendo base de contingência.")
     return processar_dados_padrao()
+    
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
     
