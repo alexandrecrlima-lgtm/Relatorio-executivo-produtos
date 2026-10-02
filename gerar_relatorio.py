@@ -301,10 +301,16 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
+    # JQLs com escopo expandido para capturar toda a base de 6.672+ chamados
     queries = [
-        "project in (TICKET, ECOIT) AND (cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') OR labels in ('Ecommerce-Sistemas', 'Ecommerce') OR 'Request Type' = 'Intercom Incidentes') ORDER BY created DESC",
-        "project in (TICKET, ECOIT) ORDER BY created DESC",
-        "cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') ORDER BY created DESC"
+        # 1. Busca ampla por projetos (sem filtrar cf[22532] que pode estar nulo em chamados antigos)
+        "project in (TICKET, ECOIT, SAC) AND created >= '2026-01-01' ORDER BY created DESC",
+        
+        # 2. Busca por Custom Field OU Projetos combinados
+        "cf[22532] in ('Ecommerce - Suporte Sistemas', 'Ecommerce - Suporte Sistemas N3', 'Sustentação Intercom - Suporte Sistemas') OR project in (TICKET, ECOIT, SAC) ORDER BY created DESC",
+        
+        # 3. Busca geral dos projetos
+        "project in (TICKET, ECOIT, SAC) ORDER BY created DESC"
     ]
 
     for idx, jql in enumerate(queries, 1):
