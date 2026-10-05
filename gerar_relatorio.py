@@ -300,8 +300,8 @@ def executar_busca_v3(url, headers, auth, jql):
 
 def buscar_dados_jira():
     if not domain or not token or not email:
-        print("Aviso: Chaves do Jira não configuradas. Carregando dados de demonstração.")
-        return processar_dados_padrao()
+        print("❌ Erro: Chaves do Jira não configuradas.")
+        return None
 
     url = f"{domain}/rest/api/3/search/jql"
     auth = (email, token)
@@ -310,23 +310,28 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    queries = [
-        'project in (TICKET, ECOIT) AND (level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
-    ]
+    # JQL Real e Dinâmica: Busca por OR condicional nos projetos TICKET e ECOIT
+    jql_dinamica = (
+        'project in (TICKET, ECOIT) AND ('
+        'level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
+        'cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
+        'cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
+        'labels in ("Ecommerce-Sistemas", "Ecommerce") OR '
+        '"Request Type" = "Intercom Incidentes"'
+        ') AND created >= "2026-01-01 00:00" ORDER BY created DESC'
+    )
 
-    for idx, jql in enumerate(queries, 1):
-        print(f"🔍 Executando tentativa JQL #{idx} no endpoint {url}...")
-        issues = executar_busca_v3(url, headers, auth, jql)
-        
-        # Se a API retornar a base completa (> 5000 chamados), processa a API viva
-        if len(issues) >= 5000:
-            print(f"🎉 SUCESSO REAL! {len(issues)} chamados capturados dinamicamente.")
-            return processar_chamados_jira(issues)
-        else:
-            print(f"ℹ️ API retornou {len(issues)} chamados. Aplicando modelo consolidado do Rovo (6.672 chamados).")
-
-    return processar_dados_padrao()
-
+    print(f"🔍 Executando busca dinâmica na API do Jira...")
+    issues = executar_busca_v3(url, headers, auth, jql_dinamica)
+    
+    print(f"📊 Total de chamados REAIS extraídos da API: {len(issues)}")
+    
+    if len(issues) > 0:
+        return processar_chamados_jira(issues)
+    
+    print("⚠️ Nenhum chamado retornado pela API.")
+    return None
+    
 def gerar_pagina_html(products_data):
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
     
