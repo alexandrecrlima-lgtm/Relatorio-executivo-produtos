@@ -232,31 +232,27 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # 🎯 JQL REST v3: Usa busca por correspondência de texto (~), atributos de Assets e IDs de campos
-    # Isso impede que a API v3 descarte a cláusula do Grupo Solucionador/Assets e resgata o histórico desde Janeiro.
-    jql = (
-        'project in (TICKET, ECOIT) AND ('
-        'cf[22530] ~ "Ecommerce - Suporte Sistemas" OR '
-        'cf[22530] ~ "Ecommerce - Suporte Sistemas N3" OR '
-        'cf[22530] ~ "Sustentação Intercom - Suporte Sistemas" OR '
-        'cf[10767] ~ "Ecommerce - Suporte Sistemas" OR '
-        'cf[10767] ~ "Ecommerce - Suporte Sistemas N3" OR '
-        'cf[10767] ~ "Sustentação Intercom - Suporte Sistemas" OR '
-        'level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
-        'labels in ("Ecommerce-Sistemas", "Ecommerce") OR '
-        '"Request Type" = "Intercom Incidentes"'
-        ') AND created >= "2026-01-01 00:00" ORDER BY created DESC'
-    )
+    # JQLs com sintaxe 100% válida na API REST v3 (Sem operador '~' em campos de Assets/CMDB)
+    queries = [
+        # 1. Busca usando igualdade estrita nos IDs de Assets e Grupos
+        'project in (TICKET, ECOIT) AND (cf[22530] = "Ecommerce - Suporte Sistemas" OR cf[22530] = "Ecommerce - Suporte Sistemas N3" OR cf[22530] = "Sustentação Intercom - Suporte Sistemas" OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC',
 
-    print("🔍 Executando busca direcionada na API v3 com suporte a Objetos de Assets...")
-    issues = executar_busca_v3(url, headers, auth, jql)
-    print(f"📊 TOTAL RECONCILIADO NA API: {len(issues)} chamados.")
-    
-    if len(issues) > 0:
-        return processar_chamados_jira(issues)
+        # 2. Busca de contingência cobrindo Assets e Labels
+        'project in (TICKET, ECOIT) AND (cf[22530] HAVING (objectAttribute = "Ecommerce - Suporte Sistemas") OR cf[22530] HAVING (objectAttribute = "Ecommerce - Suporte Sistemas N3") OR cf[22530] HAVING (objectAttribute = "Sustentação Intercom - Suporte Sistemas") OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
+    ]
 
-    print("⚠️ Nenhum chamado retornado pela API.")
-    return None    
+    for idx, jql in enumerate(queries, 1):
+        print(f"🔍 Executando tentativa JQL #{idx} com sintaxe nativa de Assets...")
+        issues = executar_busca_v3(url, headers, auth, jql)
+        print(f"📊 Resultado da tentativa #{idx}: {len(issues)} chamados retornado(s).")
+        
+        if len(issues) > 0:
+            print(f"🎉 SUCESSO! {len(issues)} chamados capturados na tentativa #{idx}.")
+            return processar_chamados_jira(issues)
+
+    print("⚠️ Nenhuma consulta JQL retornou chamados.")
+    return None
+
 def gerar_pagina_html(products_data):
     if not products_data:
         print("❌ Erro: Nenhum dado retornado da API para gerar o relatório.")
