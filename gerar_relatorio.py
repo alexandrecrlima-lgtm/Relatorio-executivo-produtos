@@ -85,7 +85,6 @@ def calcular_diferenca_horas(dt_inicio_str, dt_fim_str):
     if not dt_inicio_str or not dt_fim_str:
         return None
     try:
-        # Trata timezone ISO (ex: 2026-03-10T14:30:00.000-0300)
         dt_inicio = datetime.strptime(dt_inicio_str[:19], "%Y-%m-%dT%H:%M:%S")
         dt_fim = datetime.strptime(dt_fim_str[:19], "%Y-%m-%dT%H:%M:%S")
         diff = (dt_fim - dt_inicio).total_seconds() / 3600.0
@@ -102,7 +101,7 @@ def processar_chamados_jira(issues):
             "sla_cumpridos": 0,
             "total_resolvidos": 0,
             "soma_horas_resolucao": 0.0,
-            "months": [0] * 12, # Suporta ano cheio
+            "months": [0] * 12,
             "motives_map": {}
         }
 
@@ -124,22 +123,19 @@ def processar_chamados_jira(issues):
 
         prod["total"] += 1
         
-        # 2. Cálculo do MTTR Dinâmico (Horas de Resolução)
+        # 2. MTTR Dinâmico e Cálculo de SLA
         resolution_date_str = fields.get("resolutiondate")
         if resolution_date_str and created_str:
             horas = calcular_diferenca_horas(created_str, resolution_date_str)
             if horas is not None:
                 prod["soma_horas_resolucao"] += horas
                 prod["total_resolvidos"] += 1
-                
-                # Regra de SLA (Considera dentro do SLA se resolvido em até 24h ou conforme indicador do JSM)
                 if horas <= 24.0:
                     prod["sla_cumpridos"] += 1
         else:
-            # Para chamados em aberto sem violação grave
             prod["sla_cumpridos"] += 1
 
-        # 3. Mapeamento Dinâmico de Motivos
+        # 3. Motivos Dinâmicos
         resumo = fields.get("customfield_10476") or fields.get("customfield_11631") or fields.get("summary", "Outros Chamados")
         if isinstance(resumo, dict):
             resumo = resumo.get("value", "Outros Chamados")
@@ -148,18 +144,16 @@ def processar_chamados_jira(issues):
         motivos = prod["motives_map"]
         motivos[resumo_str] = motivos.get(resumo_str, 0) + 1
 
-    # Finaliza consolidação das métricas dinâmicas por produto
+    # Finalização das métricas por produto
     for key, prod in products_data.items():
         total_prod = prod["total"]
         
-        # Calcula SLA % Dinâmico
         if total_prod > 0:
             pct_sla = (prod["sla_cumpridos"] / total_prod) * 100.0
             prod["sla"] = f"{pct_sla:.1f}%"
         else:
             prod["sla"] = "100.0%"
 
-        # Calcula MTTR Médio Dinâmico
         if prod["total_resolvidos"] > 0:
             media_horas = prod["soma_horas_resolucao"] / prod["total_resolvidos"]
             dias = media_horas / 24.0
@@ -167,7 +161,6 @@ def processar_chamados_jira(issues):
         else:
             prod["mttr"] = "N/A"
 
-        # Ordena e formata Top Motivos
         motivos_ordenados = sorted(prod["motives_map"].items(), key=lambda x: x[1], reverse=True)[:5]
         prod["motives"] = []
         div_total = total_prod if total_prod > 0 else 1
@@ -180,7 +173,6 @@ def processar_chamados_jira(issues):
         del prod["total_resolvidos"]
         del prod["soma_horas_resolucao"]
 
-    # Reduz o vetor de meses para refletir até Outubro se necessário ou mantém os preenchidos
     for key in products_data:
         products_data[key]["months"] = products_data[key]["months"][:10]
 
@@ -207,7 +199,7 @@ def executar_busca_v3(url, headers, auth, jql):
         try:
             resp = requests.post(url, headers=headers, auth=auth, json=payload)
             if resp.status_code != 200:
-                print(f"❌ Erro HTTP {resp.status_code}: {resp.text[:300]}")
+                print(f"⚠️ Aviso HTTP {resp.status_code}: {resp.text[:300]}")
                 break
 
             data = resp.json()
@@ -223,14 +215,14 @@ def executar_busca_v3(url, headers, auth, jql):
             if not next_page_token:
                 break
         except Exception as e:
-            print(f"❌ Exceção ao executar chamada API: {e}")
+            print(f"⚠️ Exceção na API: {e}")
             break
 
     return issues_totais
 
 def buscar_dados_jira():
     if not domain or not token or not email:
-        print("❌ Erro: Variaveis de ambiente JIRA_DOMAIN, JIRA_EMAIL ou JIRA_API_TOKEN nao configuradas.")
+        print("❌ Erro: Variáveis de ambiente JIRA_DOMAIN, JIRA_EMAIL ou JIRA_API_TOKEN não configuradas.")
         return None
 
     url = f"{domain}/rest/api/3/search/jql"
@@ -240,23 +232,22 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQL Expandida para capturar o volume total dos projetos (TICKET e ECOIT) em 2026 sem restrições que cortem chamados
-    jql = 'project in (TICKET, ECOIT) AND (created >= "2026-01-01" OR updated >= "2026-01-01") ORDER BY created DESC'
+    # JQL com IDs limpos para a API v3
+    jql = 'project in (TICKET, ECOIT) AND (level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
 
-    print("🔍 Executando busca dinamica de alta volumetria na API do Jira...")
+    print("🔍 Executando busca direcionada na API do Jira...")
     issues = executar_busca_v3(url, headers, auth, jql)
     
-    print(f"📊 Total de chamados REAIS extraidos da API: {len(issues)}")
-    
     if len(issues) > 0:
+        print(f"🎉 SUCESSO! {len(issues)} chamados retornados da API.")
         return processar_chamados_jira(issues)
-    
-    print("⚠️ Nenhum chamado retornado pela API.")
+
+    print("⚠️ Nenhuma consulta JQL retornou chamados.")
     return None
 
 def gerar_pagina_html(products_data):
     if not products_data:
-        print("❌ Erro: Nenhum dado processado para gerar o HTML.")
+        print("❌ Erro: Nenhum dado retornado da API para gerar o relatório.")
         return
 
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
@@ -264,12 +255,10 @@ def gerar_pagina_html(products_data):
     total_chamados_ano = sum(p["total"] for p in products_data.values())
     total_chamados_fmt = f"{total_chamados_ano:,}".replace(",", ".")
 
-    # Cálculo Global do SLA e MTTR Dinâmicos
     tot_cumpridos = 0
     tot_chamados = 0
     for p in products_data.values():
         tot_chamados += p["total"]
-        # Extrai porcentagem numérica do SLA calculado
         sla_val = float(p["sla"].replace("%", ""))
         tot_cumpridos += (sla_val / 100.0) * p["total"]
 
@@ -428,7 +417,6 @@ def gerar_pagina_html(products_data):
     let trendChartInstance = null;
 
     function initGlobalMetrics() {
-      // Calcula MTTR médio global dinâmico a partir do primeiro produto válido
       const firstProd = productsData[currentProdKey];
       if (firstProd && firstProd.mttr) {
         document.getElementById('globalMTTR').innerText = firstProd.mttr;
@@ -536,7 +524,7 @@ def gerar_pagina_html(products_data):
         tr.innerHTML = `
           <td class="p-2.5 text-slate-200 font-medium">${m.name}</td>
           <td class="p-2.5 text-right font-mono font-semibold text-slate-300">${m.qty}</td>
-          <td class="p-2.5 text-right font-mono text-blue-400 font-bold">${m.pct}</td>
+          <td class="p-2.5 text-right text-blue-400 font-bold">${m.pct}</td>
         `;
         tbody.appendChild(tr);
       });
