@@ -144,6 +144,7 @@ def processar_chamados_jira(issues):
         motivos = prod["motives_map"]
         motivos[resumo_str] = motivos.get(resumo_str, 0) + 1
 
+    # Finalização das métricas por produto
     for key, prod in products_data.items():
         total_prod = prod["total"]
         
@@ -231,22 +232,15 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQLs formatadas especificamente para a sintaxe aceita pela API v3
-    queries = [
-        # 1. JQL oficial usando IDs internos limpos
-        'project in (TICKET, ECOIT) AND (level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC',
+    # JQL com IDs limpos para a API v3
+    jql = 'project in (TICKET, ECOIT) AND (level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
 
-        # 2. JQL de contingência baseada em Custom Fields e Labels
-        'project in (TICKET, ECOIT) AND (cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01" ORDER BY created DESC'
-    ]
-
-    for idx, jql in enumerate(queries, 1):
-        print(f"🔍 Executando tentativa JQL #{idx}...")
-        issues = executar_busca_v3(url, headers, auth, jql)
-        
-        if len(issues) > 0:
-            print(f"🎉 SUCESSO! {len(issues)} chamados retornados na tentativa #{idx}.")
-            return processar_chamados_jira(issues)
+    print("🔍 Executando busca direcionada na API do Jira...")
+    issues = executar_busca_v3(url, headers, auth, jql)
+    
+    if len(issues) > 0:
+        print(f"🎉 SUCESSO! {len(issues)} chamados retornados da API.")
+        return processar_chamados_jira(issues)
 
     print("⚠️ Nenhuma consulta JQL retornou chamados.")
     return None
@@ -575,4 +569,47 @@ def gerar_pagina_html(products_data):
       trendChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: monthNames.map(m =>
+          labels: monthNames.map(m => m.substring(0, 3)),
+          datasets: [{
+            label: 'Volume de Chamados',
+            data: prod.months,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+            fill: true,
+            tension: 0.3,
+            pointBackgroundColor: '#60a5fa',
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+            x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    initGlobalMetrics();
+    initTabs();
+    renderProduct();
+  </script>
+</body>
+</html>
+"""
+
+    html_final = template.replace("__DATA_ATUALIZACAO__", data_atualizacao)\
+                         .replace("__TOTAL_CHAMADOS__", total_chamados_fmt)\
+                         .replace("__SLA_GLOBAL__", sla_global_fmt)\
+                         .replace("__PRODUCTS_JSON__", products_json)
+
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_final)
+    print("✅ Relatório HTML 100% Dinâmico gerado com sucesso!")
+
+if __name__ == "__main__":
+    dados = buscar_dados_jira()
+    gerar_pagina_html(dados)
