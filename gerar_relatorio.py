@@ -222,7 +222,7 @@ def executar_busca_v3(url, headers, auth, jql):
 
 def buscar_dados_jira():
     if not domain or not token or not email:
-        print("❌ Erro: Variáveis de ambiente JIRA_DOMAIN, JIRA_EMAIL ou JIRA_API_TOKEN não configuradas.")
+        print("❌ Erro: Variáveis de ambiente não configuradas.")
         return None
 
     url = f"{domain}/rest/api/3/search/jql"
@@ -232,25 +232,31 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQL com envolvente estrita de parênteses (evita disparar para 130k+ chamados)
-    jql = (
-        'project in (TICKET, ECOIT) AND ('
-        'level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
-        'cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR '
-        'cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR '
-        'labels in ("Ecommerce-Sistemas", "Ecommerce") OR '
-        '"Request Type" = "Intercom Incidentes"'
-        ') AND created >= "2026-01-01 00:00" ORDER BY created DESC'
-    )
+    # DIAGNÓSTICO: Testa a cláusula de Segurança isoladamente na API
+    testes_jql = {
+        "A_Level": 'project in (TICKET, ECOIT) AND level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01 00:00"',
+        "B_Security": 'project in (TICKET, ECOIT) AND security in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01 00:00"',
+        "C_SecurityLevel": 'project in (TICKET, ECOIT) AND securityLevel in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01 00:00"',
+        "D_Grupo_10767": 'project in (TICKET, ECOIT) AND cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01 00:00"',
+        "E_Grupo_22530": 'project in (TICKET, ECOIT) AND cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") AND created >= "2026-01-01 00:00"'
+    }
 
-    print("🔍 Executando busca direcionada e estrita na API do Jira...")
+    print("--------------------------------------------------")
+    print("🔍 TESTANDO CLÁUSULAS DE SEGURANÇA ISOLADAMENTE NA API REST v3...")
+    for nome, jql_teste in testes_jql.items():
+        issues_teste = executar_busca_v3(url, headers, auth, jql_teste)
+        print(f"📊 Teste [{nome}]: {len(issues_teste)} chamados retornados.")
+    print("--------------------------------------------------")
+
+    # JQL Principal Unificada
+    jql = 'project in (TICKET, ECOIT) AND (level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR securityLevel in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
+
     issues = executar_busca_v3(url, headers, auth, jql)
-    print(f"📊 Total de chamados EXATOS extraídos da API: {len(issues)}")
+    print(f"📊 TOTAL FINAL EXTRAÍDO: {len(issues)} chamados.")
     
     if len(issues) > 0:
         return processar_chamados_jira(issues)
 
-    print("⚠️ Nenhum chamado retornado pela API.")
     return None
     
 def gerar_pagina_html(products_data):
