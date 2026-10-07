@@ -232,31 +232,27 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQL Ampla dos Projetos Oficiais (TICKET e ECOIT) em 2026
-    # Isso evita que o Jira invalide/ignore nomes de campos com aspas e acentos ("Segurança" / "Grupo Solucionador") na API v3
-    queries = [
-        # 1. Todos os tickets dos dois projetos criados em 2026 (Sem cortar chamados por sintaxe de campo)
-        'project in (TICKET, ECOIT) AND created >= "2026-01-01 00:00" ORDER BY created DESC',
+    # JQL com envolvente estrita de parênteses (evita disparar para 130k+ chamados)
+    jql = (
+        'project in (TICKET, ECOIT) AND ('
+        'level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
+        'cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR '
+        'cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR '
+        'labels in ("Ecommerce-Sistemas", "Ecommerce") OR '
+        '"Request Type" = "Intercom Incidentes"'
+        ') AND created >= "2026-01-01 00:00" ORDER BY created DESC'
+    )
 
-        # 2. Busca ampla com atualização em 2026
-        'project in (TICKET, ECOIT) AND (created >= "2026-01-01" OR updated >= "2026-01-01") ORDER BY created DESC'
-    ]
-
-    for idx, jql in enumerate(queries, 1):
-        print(f"🔍 Executando busca de alta volumetria na API (Tentativa #{idx})...")
-        issues = executar_busca_v3(url, headers, auth, jql)
-        print(f"📊 Resultado da tentativa #{idx}: {len(issues)} chamados retornado(s).")
-        
-        if len(issues) >= 4000:
-            print(f"🎉 SUCESSO! Base real completa de {len(issues)} chamados capturada com sucesso.")
-            return processar_chamados_jira(issues)
-
+    print("🔍 Executando busca direcionada e estrita na API do Jira...")
+    issues = executar_busca_v3(url, headers, auth, jql)
+    print(f"📊 Total de chamados EXATOS extraídos da API: {len(issues)}")
+    
     if len(issues) > 0:
         return processar_chamados_jira(issues)
 
-    print("⚠️ Nenhuma consulta JQL retornou chamados.")
-    return None    
-
+    print("⚠️ Nenhum chamado retornado pela API.")
+    return None
+    
 def gerar_pagina_html(products_data):
     if not products_data:
         print("❌ Erro: Nenhum dado retornado da API para gerar o relatório.")
