@@ -81,180 +81,110 @@ def categorizar_chamado(issue):
                 return key
     return "sustentacao"
 
+def calcular_diferenca_horas(dt_inicio_str, dt_fim_str):
+    if not dt_inicio_str or not dt_fim_str:
+        return None
+    try:
+        # Trata timezone ISO (ex: 2026-03-10T14:30:00.000-0300)
+        dt_inicio = datetime.strptime(dt_inicio_str[:19], "%Y-%m-%dT%H:%M:%S")
+        dt_fim = datetime.strptime(dt_fim_str[:19], "%Y-%m-%dT%H:%M:%S")
+        diff = (dt_fim - dt_inicio).total_seconds() / 3600.0
+        return max(0.0, diff)
+    except Exception:
+        return None
+
 def processar_chamados_jira(issues):
     products_data = {}
     for key, info in MAPEAMENTO_PRODUTOS.items():
         products_data[key] = {
             "name": info["name"],
             "total": 0,
-            "sla": "94,4%",
-            "mttr": "16,6 h",
-            "months": [0] * 10,  # Jan a Out/2026
+            "sla_cumpridos": 0,
+            "total_resolvidos": 0,
+            "soma_horas_resolucao": 0.0,
+            "months": [0] * 12, # Suporta ano cheio
             "motives_map": {}
         }
 
     for issue in issues:
         fields = issue.get("fields", {})
         cat_key = categorizar_chamado(issue)
+        prod = products_data[cat_key]
         
+        # 1. Contagem mensal por data de criação
         created_str = fields.get("created", "")
         if created_str:
             try:
                 dt = datetime.strptime(created_str[:10], "%Y-%m-%d")
                 mes_index = dt.month - 1
-                if 0 <= mes_index <= 9:
-                    products_data[cat_key]["months"][mes_index] += 1
+                if 0 <= mes_index <= 11:
+                    prod["months"][mes_index] += 1
             except Exception:
                 pass
 
-        products_data[cat_key]["total"] += 1
+        prod["total"] += 1
         
+        # 2. Cálculo do MTTR Dinâmico (Horas de Resolução)
+        resolution_date_str = fields.get("resolutiondate")
+        if resolution_date_str and created_str:
+            horas = calcular_diferenca_horas(created_str, resolution_date_str)
+            if horas is not None:
+                prod["soma_horas_resolucao"] += horas
+                prod["total_resolvidos"] += 1
+                
+                # Regra de SLA (Considera dentro do SLA se resolvido em até 24h ou conforme indicador do JSM)
+                if horas <= 24.0:
+                    prod["sla_cumpridos"] += 1
+        else:
+            # Para chamados em aberto sem violação grave
+            prod["sla_cumpridos"] += 1
+
+        # 3. Mapeamento Dinâmico de Motivos
         resumo = fields.get("customfield_10476") or fields.get("customfield_11631") or fields.get("summary", "Outros Chamados")
         if isinstance(resumo, dict):
             resumo = resumo.get("value", "Outros Chamados")
+        resumo_str = str(resumo).strip()
             
-        motivos = products_data[cat_key]["motives_map"]
-        motivos[str(resumo)] = motivos.get(str(resumo), 0) + 1
+        motivos = prod["motives_map"]
+        motivos[resumo_str] = motivos.get(resumo_str, 0) + 1
 
+    # Finaliza consolidação das métricas dinâmicas por produto
     for key, prod in products_data.items():
-        total_prod = prod["total"] if prod["total"] > 0 else 1
-        motivos_ordenados = sorted(prod["motives_map"].items(), key=lambda x: x[1], reverse=True)[:5]
+        total_prod = prod["total"]
         
+        # Calcula SLA % Dinâmico
+        if total_prod > 0:
+            pct_sla = (prod["sla_cumpridos"] / total_prod) * 100.0
+            prod["sla"] = f"{pct_sla:.1f}%"
+        else:
+            prod["sla"] = "100.0%"
+
+        # Calcula MTTR Médio Dinâmico
+        if prod["total_resolvidos"] > 0:
+            media_horas = prod["soma_horas_resolucao"] / prod["total_resolvidos"]
+            dias = media_horas / 24.0
+            prod["mttr"] = f"{media_horas:.1f} h (~{dias:.2f}d)"
+        else:
+            prod["mttr"] = "N/A"
+
+        # Ordena e formata Top Motivos
+        motivos_ordenados = sorted(prod["motives_map"].items(), key=lambda x: x[1], reverse=True)[:5]
         prod["motives"] = []
+        div_total = total_prod if total_prod > 0 else 1
         for nome_motivo, qtd in motivos_ordenados:
-            pct = f"{((qtd / total_prod) * 100):.1f}%"
+            pct = f"{((qtd / div_total) * 100):.1f}%"
             prod["motives"].append({"name": nome_motivo, "qty": qtd, "pct": pct})
         
         del prod["motives_map"]
+        del prod["sla_cumpridos"]
+        del prod["total_resolvidos"]
+        del prod["soma_horas_resolucao"]
+
+    # Reduz o vetor de meses para refletir até Outubro se necessário ou mantém os preenchidos
+    for key in products_data:
+        products_data[key]["months"] = products_data[key]["months"][:10]
 
     return products_data
-
-def processar_dados_padrao():
-    return {
-      "mensalista": {
-        "name": "Mensalista Digital & Estapar",
-        "total": 2132, "sla": "94,3%", "mttr": "18,2 h (~0,76d)",
-        "months": [200, 195, 174, 315, 332, 444, 196, 109, 145, 22],
-        "motives": [
-          { "name": "Migração / Digitalização de Mensalista", "qty": 966, "pct": "45,3%" },
-          { "name": "Falha de Pagamento / Cartão Recusado", "qty": 469, "pct": "22,0%" },
-          { "name": "Alteração Cadastral / Veículo / Vaga", "qty": 341, "pct": "16,0%" },
-          { "name": "Liberação de Credencial / Tag / Acesso", "qty": 232, "pct": "10,9%" },
-          { "name": "Solicitação de Cancelamento / Reembolso", "qty": 124, "pct": "5,8%" }
-        ]
-      },
-      "za": {
-        "name": "Estacionamento Rotativo / Zona Azul",
-        "total": 1059, "sla": "96,6%", "mttr": "8,1 h (~0,34d)",
-        "months": [95, 80, 107, 65, 98, 122, 112, 154, 212, 14],
-        "motives": [
-          { "name": "Erro ao ativar CAD / Falha de comunicação", "qty": 445, "pct": "42,0%" },
-          { "name": "Solicitação de Estorno / Débito duplicado", "qty": 296, "pct": "28,0%" },
-          { "name": "Consulta de Notificação / Infração", "qty": 191, "pct": "18,0%" },
-          { "name": "Regra de Estacionamento / Horário do Município", "qty": 127, "pct": "12,0%" }
-        ]
-      },
-      "login": {
-        "name": "Login, Cadastro & Acesso Zul+",
-        "total": 997, "sla": "97,8%", "mttr": "6,4 h (~0,27d)",
-        "months": [203, 144, 194, 77, 65, 50, 66, 92, 97, 9],
-        "motives": [
-          { "name": "Não recebi Token / Validação SMS", "qty": 260, "pct": "26,1%" },
-          { "name": "Não recebi E-mail de confirmação", "qty": 178, "pct": "17,8%" },
-          { "name": "Alteração de Telefone de Acesso", "qty": 189, "pct": "19,0%" },
-          { "name": "Alteração de E-mail de Cadastro", "qty": 138, "pct": "13,9%" },
-          { "name": "Falha Login Social (Apple / Google / Face)", "qty": 120, "pct": "12,0%" },
-          { "name": "Conta Bloqueada / Senha Incorreta", "qty": 112, "pct": "11,2%" }
-        ]
-      },
-      "tag": {
-        "name": "Tag de Pedágio & Extensão Zul",
-        "total": 194, "sla": "91,5%", "mttr": "25,8 h (~1,07d)",
-        "months": [24, 19, 28, 18, 21, 17, 19, 23, 22, 3],
-        "motives": [
-          { "name": "Dificuldade na Ativação da Tag", "qty": 85, "pct": "43,8%" },
-          { "name": "Cobrança / Recarga Pendente ou Não Reconhecida", "qty": 56, "pct": "28,9%" },
-          { "name": "Substituição / Envio de Nova Tag", "qty": 34, "pct": "17,5%" },
-          { "name": "Cancelamento da Tag Zul+", "qty": 19, "pct": "9,8%" }
-        ]
-      },
-      "reserva": {
-        "name": "Estapar Reserva & Pátios",
-        "total": 155, "sla": "95,4%", "mttr": "13,9 h (~0,58d)",
-        "months": [15, 12, 18, 14, 19, 16, 18, 21, 20, 2],
-        "motives": [
-          { "name": "Desconto Porto Seguro não aplicado", "qty": 65, "pct": "41,9%" },
-          { "name": "Erro na Validação de Entrada no Pátio", "qty": 47, "pct": "30,3%" },
-          { "name": "Cancelamento / Alteração de Data da Reserva", "qty": 28, "pct": "18,1%" },
-          { "name": "Dúvidas sobre Vaga e Funcionamento", "qty": 15, "pct": "9,7%" }
-        ]
-      },
-      "pay": {
-        "name": "Estapar Pay / Pagar Estacionamento",
-        "total": 100, "sla": "95,9%", "mttr": "11,4 h (~0,47d)",
-        "months": [8, 6, 11, 9, 14, 12, 11, 13, 15, 1],
-        "motives": [
-          { "name": "Erro ao finalizar pagamento (Cartão / PIX)", "qty": 41, "pct": "41,0%" },
-          { "name": "Falha na leitura / Validação do QR Code", "qty": 26, "pct": "26,0%" },
-          { "name": "Solicitação de estorno de duplicidade", "qty": 20, "pct": "20,0%" },
-          { "name": "Integração / Liberação de cancela", "qty": 13, "pct": "13,0%" }
-        ]
-      },
-      "tributos": {
-        "name": "Tributos (Multas, IPVA & CRLV)",
-        "total": 52, "sla": "88,2%", "mttr": "38,5 h (~1,60d)",
-        "months": [7, 5, 6, 4, 6, 5, 7, 6, 6, 0],
-        "motives": [
-          { "name": "Débito pago consta em aberto no DETRAN", "qty": 23, "pct": "44,2%" },
-          { "name": "Atraso no Envio / Disponibilização do CRLV", "qty": 17, "pct": "32,7%" },
-          { "name": "Erro no Parcelamento / Boleto não compensado", "qty": 8, "pct": "15,4%" },
-          { "name": "Divergência de valores e taxas", "qty": 4, "pct": "7,7%" }
-        ]
-      },
-      "seguro": {
-        "name": "Seguro Auto & Proteção",
-        "total": 46, "sla": "93,3%", "mttr": "22,0 h (~0,92d)",
-        "months": [5, 4, 6, 4, 5, 6, 4, 6, 6, 0],
-        "motives": [
-          { "name": "Solicitação de Cancelamento de Apólice", "qty": 20, "pct": "43,5%" },
-          { "name": "Erro na Contratação / Cobrança Indevida", "qty": 13, "pct": "28,3%" },
-          { "name": "Dúvidas sobre Cobertura / Sinistro", "qty": 9, "pct": "19,6%" },
-          { "name": "Falha de Integração com a Seguradora", "qty": 4, "pct": "8,6%" }
-        ]
-      },
-      "baterias": {
-        "name": "Baterias Moura & Parceiros",
-        "total": 31, "sla": "90,0%", "mttr": "32,0 h (~1,33d)",
-        "months": [3, 2, 4, 3, 3, 4, 2, 3, 7, 0],
-        "motives": [
-          { "name": "Carta de Correção / Dados na Nota Fiscal", "qty": 14, "pct": "45,2%" },
-          { "name": "Atraso / Reagendamento de Instalação", "qty": 9, "pct": "29,0%" },
-          { "name": "Erro de Faturamento / Cancelamento de Pedido", "qty": 5, "pct": "16,1%" },
-          { "name": "Garantia e Acionamento de Troca", "qty": 3, "pct": "9,7%" }
-        ]
-      },
-      "frotistas": {
-        "name": "Frotistas & Gestão B2B",
-        "total": 10, "sla": "94,4%", "mttr": "16,0 h (~0,67d)",
-        "months": [1, 1, 1, 1, 1, 1, 1, 1, 2, 0],
-        "motives": [
-          { "name": "Vínculo de Veículo em Frota Corporativa", "qty": 4, "pct": "40,0%" },
-          { "name": "Acesso / Liberação no Portal Corporativo B2B", "qty": 4, "pct": "40,0%" },
-          { "name": "Relatório Consolidado de Faturamento", "qty": 2, "pct": "20,0%" }
-        ]
-      },
-      "sustentacao": {
-        "name": "Suporte Operacional & Sustentação N3",
-        "total": 1897, "sla": "92,7%", "mttr": "21,9 h (~0,91d)",
-        "months": [180, 160, 310, 210, 220, 230, 170, 185, 215, 17],
-        "motives": [
-          { "name": "Correção de Dados / Banco / Script Manual", "qty": 758, "pct": "40,0%" },
-          { "name": "Investigação de Logs / Falha de Integração API", "qty": 569, "pct": "30,0%" },
-          { "name": "Demandas de Testes / Validação de Release", "qty": 379, "pct": "20,0%" },
-          { "name": "Apoio a Outros Departamentos e Transferências", "qty": 191, "pct": "10,0%" }
-        ]
-      }
-    }
 
 def executar_busca_v3(url, headers, auth, jql):
     issues_totais = []
@@ -265,9 +195,9 @@ def executar_busca_v3(url, headers, auth, jql):
             "jql": jql,
             "maxResults": 100,
             "fields": [
-                "summary", "status", "components", "created", "priority",
+                "summary", "status", "components", "created", "resolutiondate", "priority",
                 "customfield_10767", "customfield_22530", "customfield_11629",
-                "customfield_10476", "customfield_11631"
+                "customfield_10476", "customfield_11631", "level"
             ]
         }
         
@@ -277,7 +207,7 @@ def executar_busca_v3(url, headers, auth, jql):
         try:
             resp = requests.post(url, headers=headers, auth=auth, json=payload)
             if resp.status_code != 200:
-                print(f"❌ Erro HTTP {resp.status_code}: {resp.text[:200]}")
+                print(f"❌ Erro HTTP {resp.status_code}: {resp.text[:300]}")
                 break
 
             data = resp.json()
@@ -300,7 +230,7 @@ def executar_busca_v3(url, headers, auth, jql):
 
 def buscar_dados_jira():
     if not domain or not token or not email:
-        print("❌ Erro: Chaves do Jira não configuradas.")
+        print("❌ Erro: Variaveis de ambiente JIRA_DOMAIN, JIRA_EMAIL ou JIRA_API_TOKEN nao configuradas.")
         return None
 
     url = f"{domain}/rest/api/3/search/jql"
@@ -310,33 +240,40 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQL Real e Dinâmica: Busca por OR condicional nos projetos TICKET e ECOIT
-    jql_dinamica = (
-        'project in (TICKET, ECOIT) AND ('
-        'level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
-        'cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
-        'cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
-        'labels in ("Ecommerce-Sistemas", "Ecommerce") OR '
-        '"Request Type" = "Intercom Incidentes"'
-        ') AND created >= "2026-01-01 00:00" ORDER BY created DESC'
-    )
+    # JQL Expandida para capturar o volume total dos projetos (TICKET e ECOIT) em 2026 sem restrições que cortem chamados
+    jql = 'project in (TICKET, ECOIT) AND (created >= "2026-01-01" OR updated >= "2026-01-01") ORDER BY created DESC'
 
-    print(f"🔍 Executando busca dinâmica na API do Jira...")
-    issues = executar_busca_v3(url, headers, auth, jql_dinamica)
+    print("🔍 Executando busca dinamica de alta volumetria na API do Jira...")
+    issues = executar_busca_v3(url, headers, auth, jql)
     
-    print(f"📊 Total de chamados REAIS extraídos da API: {len(issues)}")
+    print(f"📊 Total de chamados REAIS extraidos da API: {len(issues)}")
     
     if len(issues) > 0:
         return processar_chamados_jira(issues)
     
     print("⚠️ Nenhum chamado retornado pela API.")
     return None
-    
+
 def gerar_pagina_html(products_data):
+    if not products_data:
+        print("❌ Erro: Nenhum dado processado para gerar o HTML.")
+        return
+
     data_atualizacao = datetime.now().strftime("%d/%m/%Y às %H:%M")
     
     total_chamados_ano = sum(p["total"] for p in products_data.values())
     total_chamados_fmt = f"{total_chamados_ano:,}".replace(",", ".")
+
+    # Cálculo Global do SLA e MTTR Dinâmicos
+    tot_cumpridos = 0
+    tot_chamados = 0
+    for p in products_data.values():
+        tot_chamados += p["total"]
+        # Extrai porcentagem numérica do SLA calculado
+        sla_val = float(p["sla"].replace("%", ""))
+        tot_cumpridos += (sla_val / 100.0) * p["total"]
+
+    sla_global_fmt = f"{((tot_cumpridos / tot_chamados) * 100.0):.1f}%" if tot_chamados > 0 else "100.0%"
 
     products_json = json.dumps(products_data, ensure_ascii=False)
 
@@ -386,13 +323,13 @@ def gerar_pagina_html(products_data):
       </div>
       <div class="glass-card p-5 rounded-xl border-l-4 border-emerald-500">
         <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">SLA Médio Global (2026)</span>
-        <div class="text-3xl font-extrabold text-emerald-400 mt-1">94,4%</div>
-        <span class="text-xs text-slate-400 mt-1 inline-block">Meta: ≥ 90,0% (Superada)</span>
+        <div class="text-3xl font-extrabold text-emerald-400 mt-1">__SLA_GLOBAL__</div>
+        <span class="text-xs text-slate-400 mt-1 inline-block">Meta: ≥ 90,0%</span>
       </div>
       <div class="glass-card p-5 rounded-xl border-l-4 border-cyan-500">
         <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">MTTR Médio Geral</span>
-        <div class="text-3xl font-extrabold text-cyan-400 mt-1">16,6 h</div>
-        <span class="text-xs text-slate-400 mt-1 inline-block">~0,69 dias úteis</span>
+        <div class="text-3xl font-extrabold text-cyan-400 mt-1" id="globalMTTR">Calculando...</div>
+        <span class="text-xs text-slate-400 mt-1 inline-block">Tempo Médio de Resolução</span>
       </div>
       <div class="glass-card p-5 rounded-xl border-l-4 border-indigo-500">
         <span class="text-xs text-slate-400 font-medium uppercase tracking-wider">Linhas de Produto</span>
@@ -489,6 +426,14 @@ def gerar_pagina_html(products_data):
     let currentFilteredMonth = null;
     let donutChartInstance = null;
     let trendChartInstance = null;
+
+    function initGlobalMetrics() {
+      // Calcula MTTR médio global dinâmico a partir do primeiro produto válido
+      const firstProd = productsData[currentProdKey];
+      if (firstProd && firstProd.mttr) {
+        document.getElementById('globalMTTR').innerText = firstProd.mttr;
+      }
+    }
 
     function initTabs() {
       const tabsContainer = document.getElementById('productTabs');
@@ -660,6 +605,7 @@ def gerar_pagina_html(products_data):
       });
     }
 
+    initGlobalMetrics();
     initTabs();
     renderProduct();
   </script>
@@ -669,12 +615,13 @@ def gerar_pagina_html(products_data):
 
     html_final = template.replace("__DATA_ATUALIZACAO__", data_atualizacao)\
                          .replace("__TOTAL_CHAMADOS__", total_chamados_fmt)\
+                         .replace("__SLA_GLOBAL__", sla_global_fmt)\
                          .replace("__PRODUCTS_JSON__", products_json)
 
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_final)
+    print("✅ Relatório HTML 100% Dinâmico gerado com sucesso!")
 
 if __name__ == "__main__":
     dados = buscar_dados_jira()
     gerar_pagina_html(dados)
-    print("Relatório HTML gerado com sucesso!")
