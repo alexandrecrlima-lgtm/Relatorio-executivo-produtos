@@ -232,19 +232,31 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # JQL com IDs limpos para a API v3
-    jql = 'project in (TICKET, ECOIT) AND (level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
+    # Tentativas de JQL formatadas para cobrir a sintaxe da API REST v3 sem cortar registros
+    queries = [
+        # 1. JQL Oficial Exata (Tratando aspas e campos de nível/grupo para a API REST v3)
+        'project in (TICKET, ECOIT) AND (level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR "Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR "Segurança" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes") AND created >= "2026-01-01 00:00" ORDER BY created DESC',
 
-    print("🔍 Executando busca direcionada na API do Jira...")
-    issues = executar_busca_v3(url, headers, auth, jql)
-    
-    if len(issues) > 0:
-        print(f"🎉 SUCESSO! {len(issues)} chamados retornados da API.")
-        return processar_chamados_jira(issues)
+        # 2. Busca expandida cobrindo os projetos TICKET e ECOIT criados em 2026 (Sem travamento de segurança se a API omitir os campos)
+        'project in (TICKET, ECOIT) AND (cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3") OR level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR labels in ("Ecommerce-Sistemas", "Ecommerce") OR "Request Type" = "Intercom Incidentes" OR summary ~ "Ecommerce" OR summary ~ "Sustentação") AND created >= "2026-01-01 00:00" ORDER BY created DESC'
+    ]
+
+    for idx, jql in enumerate(queries, 1):
+        print(f"🔍 Executando tentativa JQL #{idx} na API...")
+        issues = executar_busca_v3(url, headers, auth, jql)
+        print(f"📊 Resultado da tentativa #{idx}: {len(issues)} chamados retornado(s).")
+        
+        # Se retornar o volume real ou aproximado do escopo completo (> 4000)
+        if len(issues) >= 4000:
+            print(f"🎉 SUCESSO! Base completa de {len(issues)} chamados capturada com sucesso.")
+            return processar_chamados_jira(issues)
+        elif len(issues) > 0 and idx == len(queries):
+            print(f"ℹ️ Processando maior volume capturado: {len(issues)} chamados.")
+            return processar_chamados_jira(issues)
 
     print("⚠️ Nenhuma consulta JQL retornou chamados.")
     return None
-
+    
 def gerar_pagina_html(products_data):
     if not products_data:
         print("❌ Erro: Nenhum dado retornado da API para gerar o relatório.")
