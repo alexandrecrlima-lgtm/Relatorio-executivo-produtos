@@ -222,7 +222,7 @@ def executar_busca_v3(url, headers, auth, jql):
 
 def buscar_dados_jira():
     if not domain or not token or not email:
-        print("❌ Erro: Variáveis de ambiente JIRA_DOMAIN, JIRA_EMAIL ou JIRA_API_TOKEN não configuradas.")
+        print("❌ Erro: Variáveis de ambiente não configuradas.")
         return None
 
     url = f"{domain}/rest/api/3/search/jql"
@@ -232,27 +232,45 @@ def buscar_dados_jira():
         "Content-Type": "application/json"
     }
 
-    # 🎯 JQL Unificada: Captura o período Pré-Maio (Campo Antigo/Level) + Pós-Maio (Assets cf[22530])
+    print("--------------------------------------------------")
+    print("🔍 DIAGNÓSTICO DE VOLUMETRIA MÊS A MÊS (PROJETOS TICKET E ECOIT)...")
+    
+    # 1. Teste amplo por mês para ver onde estão os ~6.758 chamados
+    meses = [
+        ("Jan/2026", 'project in (TICKET, ECOIT) AND created >= "2026-01-01" AND created < "2026-02-01"'),
+        ("Fev/2026", 'project in (TICKET, ECOIT) AND created >= "2026-02-01" AND created < "2026-03-01"'),
+        ("Mar/2026", 'project in (TICKET, ECOIT) AND created >= "2026-03-01" AND created < "2026-04-01"'),
+        ("Abr/2026", 'project in (TICKET, ECOIT) AND created >= "2026-04-01" AND created < "2026-05-01"'),
+        ("Mai/2026", 'project in (TICKET, ECOIT) AND created >= "2026-05-01" AND created < "2026-06-01"'),
+    ]
+
+    total_bruto_inicio_ano = 0
+    for nome_mes, jql_mes in meses:
+        issues_mes = executar_busca_v3(url, headers, auth, jql_mes)
+        qtd = len(issues_mes)
+        total_bruto_inicio_ano += qtd
+        print(f"📌 {nome_mes}: {qtd} chamados criados no total dos projetos.")
+
+    print(f"📊 TOTAL BRUTO DOS PROJETOS (JAN A MAI): {total_bruto_inicio_ano} chamados.")
+    print("--------------------------------------------------")
+
+    # 2. Executa a busca atual
     jql = (
         'project in (TICKET, ECOIT) AND ('
         'cf[10767] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
         'cf[22530] in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
         'level in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
-        '"Grupo Solucionador" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
-        '"Grupo Solucionador (Assets)" in ("Ecommerce - Suporte Sistemas", "Ecommerce - Suporte Sistemas N3", "Sustentação Intercom - Suporte Sistemas") OR '
         'labels in ("Ecommerce-Sistemas", "Ecommerce") OR '
         '"Request Type" = "Intercom Incidentes"'
         ') AND created >= "2026-01-01 00:00" ORDER BY created DESC'
     )
 
-    print("🔍 Executando busca unificada (Pré + Pós Maio/2026) na API do Jira...")
     issues = executar_busca_v3(url, headers, auth, jql)
-    print(f"📊 Total de chamados extraídos da API: {len(issues)}")
+    print(f"📊 TOTAL COM O FILTRO ATUAL: {len(issues)} chamados.")
     
     if len(issues) > 0:
         return processar_chamados_jira(issues)
 
-    print("⚠️ Nenhum chamado retornado pela API.")
     return None
     
 def gerar_pagina_html(products_data):
